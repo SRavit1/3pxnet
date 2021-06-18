@@ -232,7 +232,7 @@ def permute_all_weights_once(model, pack=8, mode=1):
                   mod.permute_list[i] = one_time_permute(mod.weight.data[i*section_size:ceiling], mod.thres, pack=cur_pack, weight_grad_gpu = mod.weight.grad[i*section_size:(i+1)*section_size])
                elif mode==0:
                   mod.permute_list[i] = perm_sort(mod.weight_org[i*section_size:ceiling])
-               elif mode==2:
+               elif mode==2: #I think perm_rand isn't defined here
                   mod.permute_list[i] = perm_rand(mod.weight.data[i*section_size:ceiling])
          elif isinstance(mod, nn.Conv2d):
             logging.info('Permuting '+ str(mod))
@@ -240,7 +240,7 @@ def permute_all_weights_once(model, pack=8, mode=1):
             grad_flat = mod.weight.grad.permute(0,2,3,1).contiguous().view(-1,mod.weight.size(1)).contiguous()
             if mode==1:
                mod.permute_list[0] = one_time_permute(weight_flat, mod.thres, pack=pack, weight_grad_gpu = grad_flat)
-            elif mode==1:
+            elif mode==1: #Should this be mode==0?
                mod.permute_list[0] = perm_sort(weight_flat)
             elif mode==2:
                mod.permute_list[0] = perm_rand(weight_flat)

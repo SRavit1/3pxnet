@@ -94,7 +94,8 @@ def main():
       torch.cuda.empty_cache()
       net.cuda(device)
    testdata=torch.tensor([2,2,2,2])
-   testdata.cuda()
+   if not args.cpu:
+      testdata.cuda()
 
 
    learning_rate = 0.001
@@ -133,7 +134,7 @@ def main():
    scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
    best_prec1 = 0
 
-   for epoch in range(0, 200):
+   for epoch in range(0, 25):
       train_loss, train_prec1, train_prec5 = utils_own.train(trainloader, net, criterion, epoch, optimizer)
       val_loss, val_prec1, val_prec5 = utils_own.validate(testloader, net, criterion, epoch, verbal=False)
       # remember best prec@1 and save checkpoint
@@ -141,7 +142,7 @@ def main():
       best_prec1 = max(val_prec1, best_prec1)
       if is_best:
          torch.save(net, save_file)
-         logging.info('\n Epoch: {0}\t'
+         logging.info('Epoch: [{0}]\t'
                       'Training Loss {train_loss:.4f} \t'
                       'Training Prec {train_prec1:.3f} \t'
                       'Validation Loss {val_loss:.4f} \t'
@@ -248,8 +249,12 @@ def main():
          np.save(upload_dir+'bn1d_{0}_mean'.format(bn1d_count), mean)
          np.save(upload_dir+'bn1d_{0}_var'.format(bn1d_count), var)
    fc_count=0
+   if not args.cpu:
+      device = 'cuda'
+   else:
+      device = 'cpu'
    if size ==0:
-      x=Variable(torch.randn(1,784,requires_grad=True,device='cuda'))
+      x=Variable(torch.randn(1,784,requires_grad=True,device=device))
       torch.onnx.export(net,x,"training_data/FC_Small.onnx",export_params=True,verbose=True,opset_version=9,input_names = ['input'], output_names = ['output'])
       model=onnx.load("training_data/FC_Small.onnx")
       # this can remove unecessary nodes
@@ -257,7 +262,7 @@ def main():
 
 
    elif size==1:
-      x=Variable(torch.randn(1,784,requires_grad=True,device='cuda'))
+      x=Variable(torch.randn(1,784,requires_grad=True,device=device))
       torch.onnx.export(net,x,"training_data/FC_Large.onnx",export_params=True,verbose=True,input_names = ['input'], output_names = ['output'])
       model=onnx.load("training_data/FC_Large.onnx")
       # this can remove unecessary nodes
@@ -265,7 +270,7 @@ def main():
 
 
    elif size==2:
-      x=Variable(torch.randn(1,1,28,28,requires_grad=True,device='cuda'))
+      x=Variable(torch.randn(1,1,28,28,requires_grad=True,device=device))
       torch.onnx.export(net,x,"training_data/CNN_Tiny.onnx",export_params=True,verbose=True,input_names = ['input'], output_names = ['output'])
       model=onnx.load("training_data/CNN_Tiny.onnx")
       # this can remove unecessary nodes
