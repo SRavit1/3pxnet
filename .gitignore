@@ -23,6 +23,7 @@
 Project1/*
 3pxnet-training/.idea/*
 # generated file
+*.pt
 CNN_Large.nnef/*
 CNN_Medium.nnef/*
 CNN_Medium1.nnef/*

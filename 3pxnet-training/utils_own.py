@@ -8,6 +8,7 @@ from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
 
+import face_detection_dataset
 
 import time
 try:
@@ -143,6 +144,12 @@ def load_dataset(dataset):
                                              download=True, transform=transform)
       classes = ('plane', 'car', 'bird', 'cat',
                  'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+   elif dataset == 'CELEBA':
+      transform = transforms.Compose([transforms.ToTensor()])
+      trainset = face_detection_dataset.FaceLandmarksDataset(root='./data', train=True, transform=transform)
+      testset = face_detection_dataset.FaceLandmarksDataset(root='./data', train=False, transform=transform)
+      classes = ('not face', 'face')
+
    return trainset, testset, classes
 
 def sim_n(tensor_group, tensor_new):

@@ -10,6 +10,63 @@ import utils_own
 
 import binarized_modules
 
+class pnet(nn.Module):
+    def __init__(self, full=False, binary=True, conv_thres=0.7, align=False):
+        super(pnet, self).__init__()
+        self.align = align
+        self.pruned = False
+
+        self.full = full
+        self.binary = binary
+
+        """
+        self.conv1 = nn.Conv2d(3, 10, kernel_size=3, stride=1, padding='valid')
+        self.conv2 = nn.Conv2d(10, 16, kernel_size=3, stride=1, padding='valid')
+        self.conv3 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding='valid')
+        self.conv4 = nn.Conv2d(32, 2, kernel_size=1, stride=1, padding='valid')
+        self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding='valid')
+        """
+
+        if full:
+            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding='valid')
+            self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding='valid')
+            self.conv3 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding='valid')
+            self.conv4 = nn.Conv2d(32, 2, kernel_size=1, stride=1, padding='valid')
+            self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding='valid')
+        elif binary:
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding='valid')
+            self.conv2 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding='valid')
+            self.conv3 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding='valid')
+            self.conv4 = binarized_modules.BinarizeConv2d(32, 2, kernel_size=1, stride=1, padding='valid')
+            self.conv5 = binarized_modules.BinarizeConv2d(32, 4, kernel_size=1, stride=1, padding='valid')
+        else:
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding='valid')
+            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding='valid', align=align)
+            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding='valid', align=align)
+            self.conv4 = binarized_modules.BinarizeConv2d(32, 2, kernel_size=1, stride=1, padding='valid')
+            self.conv5 = binarized_modules.BinarizeConv2d(32, 4, kernel_size=1, stride=1, padding='valid')
+
+
+        self.softmax1 = torch.nn.Softmax(dim = 1)
+
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        
+    def forward(self, x):
+        #TODO: take full, binary parameters into account
+        x = x.type(torch.FloatTensor)
+        x = F.relu(self.conv1(x))
+        x = self.pool1(x)
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+
+        out1 = self.softmax1(self.conv4(x))
+        out2 = self.conv5(x)
+
+        out1 = torch.reshape(out1, (-1, 2))
+        out2 = torch.reshape(out2, (-1, 4))
+
+        return out1.type(torch.DoubleTensor), out2.type(torch.DoubleTensor)
+
 class FC_small(nn.Module):
     def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, hid=512, ind=784, align=False):
         super(FC_small, self).__init__()
