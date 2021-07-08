@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 
 class FaceLandmarksDataset(torch.utils.data.Dataset):
-    def __init__(self, root, transform=None, train=False):
+    def __init__(self, root, transform=None, train=False, model='onet'):
         self.root = root
         self.transform = transform
 
@@ -16,9 +16,19 @@ class FaceLandmarksDataset(torch.utils.data.Dataset):
         self.all_score_data = dataset['all_score_data']
         #self.all_score_data = np.argmax(self.all_score_data, axis=1)
 
-        self.all_image_data = np.empty((len(all_image_data), 12, 12, 3))
-        for i in range(len(self.all_image_data)):
-            self.all_image_data[i] = cv2.resize(all_image_data[i], (12, 12))
+        self.model = model
+        if model == 'pnet':
+            self.all_image_data = np.empty((len(all_image_data), 12, 12, 3))
+            for i in range(len(self.all_image_data)):
+                self.all_image_data[i] = cv2.resize(all_image_data[i], (12, 12))
+        elif model == 'rnet':
+            self.all_image_data = np.empty((len(all_image_data), 24, 24, 3))
+            for i in range(len(self.all_image_data)):
+                self.all_image_data[i] = cv2.resize(all_image_data[i], (24, 24))
+        elif model == 'onet':
+            self.all_image_data = all_image_data
+        else:
+            raise Exception("inappropriate model name")
 
         cutoff = int(len(self.all_image_data)*0.9)
         if train:

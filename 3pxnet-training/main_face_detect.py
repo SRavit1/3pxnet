@@ -1,4 +1,4 @@
-from network import pnet
+import network
 import utils_own
 
 import torch
@@ -75,7 +75,6 @@ def train(data_loader, model, score_criterion, box_landmark_criterion, epoch, op
    model.train()
    return forward(data_loader, model, score_criterion, box_landmark_criterion, epoch, training=True, optimizer=optimizer)
 
-
 def validate(data_loader, model, score_criterion, box_landmark_criterion, epoch, verbal=False):
    # switch to evaluate mode
    model.eval()
@@ -83,10 +82,14 @@ def validate(data_loader, model, score_criterion, box_landmark_criterion, epoch,
 
 full = True
 binary = True
-trainset, testset, classes = utils_own.load_dataset('CELEBA')
-net = pnet(full=full, binary=binary)
-
 batch=32
+pack = 32
+
+trainset, testset, classes = utils_own.load_dataset('CELEBA_pnet')
+net = network.pnet(full=full, binary=binary)
+#trainset, testset, classes = utils_own.load_dataset('CELEBA_rnet')
+#net = network.rnet(full=full, binary=binary)
+
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch, shuffle=True, num_workers=2)
 testloader = torch.utils.data.DataLoader(testset, batch_size=batch, shuffle=False, num_workers=2)
 
@@ -96,7 +99,6 @@ box_landmark_criterion = nn.MSELoss()
 lr_decay = np.power((2e-6/learning_rate), (1./100))
 
 # Train without packing constraints
-pack = 32
 
 if full:
 	extension = "_full"

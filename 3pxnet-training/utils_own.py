@@ -144,10 +144,20 @@ def load_dataset(dataset):
                                              download=True, transform=transform)
       classes = ('plane', 'car', 'bird', 'cat',
                  'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-   elif dataset == 'CELEBA':
+   elif dataset == 'CELEBA_pnet':
       transform = transforms.Compose([transforms.ToTensor()])
-      trainset = face_detection_dataset.FaceLandmarksDataset(root='./data', train=True, transform=transform)
-      testset = face_detection_dataset.FaceLandmarksDataset(root='./data', train=False, transform=transform)
+      trainset = face_detection_dataset.FaceLandmarksDataset(root='./data', train=True, transform=transform, model='pnet')
+      testset = face_detection_dataset.FaceLandmarksDataset(root='./data', train=False, transform=transform, model='pnet')
+      classes = ('not face', 'face')
+   elif dataset == 'CELEBA_rnet':
+      transform = transforms.Compose([transforms.ToTensor()])
+      trainset = face_detection_dataset.FaceLandmarksDataset(root='./data', train=True, transform=transform, model='rnet')
+      testset = face_detection_dataset.FaceLandmarksDataset(root='./data', train=False, transform=transform, model='rnet')
+      classes = ('not face', 'face')
+   elif dataset == 'CELEBA_onet':
+      transform = transforms.Compose([transforms.ToTensor()])
+      trainset = face_detection_dataset.FaceLandmarksDataset(root='./data', train=True, transform=transform, model='onet')
+      testset = face_detection_dataset.FaceLandmarksDataset(root='./data', train=False, transform=transform, model='onet')
       classes = ('not face', 'face')
 
    return trainset, testset, classes

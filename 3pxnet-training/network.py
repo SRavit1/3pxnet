@@ -53,19 +53,124 @@ class pnet(nn.Module):
         
     def forward(self, x):
         #TODO: take full, binary parameters into account
-        x = x.type(torch.FloatTensor)
-        x = F.relu(self.conv1(x))
-        x = self.pool1(x)
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
+        if self.full:
+            x = x.type(torch.FloatTensor)
+            x = F.relu(self.conv1(x))
+            x = self.pool1(x)
+            x = F.relu(self.conv2(x))
+            x = F.relu(self.conv3(x))
 
-        out1 = self.softmax1(self.conv4(x))
-        out2 = self.conv5(x)
+            out1 = self.softmax1(self.conv4(x))
+            out2 = self.conv5(x)
 
-        out1 = torch.reshape(out1, (-1, 2))
-        out2 = torch.reshape(out2, (-1, 4))
+            out1 = torch.reshape(out1, (-1, 2))
+            out2 = torch.reshape(out2, (-1, 4))
 
-        return out1.type(torch.DoubleTensor), out2.type(torch.DoubleTensor)
+            out1, out2 = out1.type(torch.DoubleTensor), out2.type(torch.DoubleTensor)
+        else:
+            x = x.type(torch.FloatTensor)
+            """
+            x = self.conv1(x)
+            x = self.pool1(x)
+            x = self.conv2(x)
+            x = self.conv3(x)
+            """
+            x = F.relu(self.conv1(x))
+            x = self.pool1(x)
+            x = F.relu(self.conv2(x))
+            x = F.relu(self.conv3(x))
+
+            out1 = self.softmax1(self.conv4(x))
+            out2 = self.conv5(x)
+
+            out1 = torch.reshape(out1, (-1, 2))
+            out2 = torch.reshape(out2, (-1, 4))
+
+            out1, out2 = out1.type(torch.DoubleTensor), out2.type(torch.DoubleTensor)
+
+        return out1, out2
+    
+
+class rnet(nn.Module):
+    def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, conv_thres=0.7, align=False):
+        super(rnet, self).__init__()
+        self.align = align
+        self.pruned = False
+
+        self.full = full
+        self.binary = binary
+
+        if full:
+            self.conv1 = nn.Conv2d(3, 28, kernel_size=3, stride=1, padding='valid')
+            self.conv2 = nn.Conv2d(28, 48, kernel_size=3, stride=1, padding='valid')
+            self.conv3 = nn.Conv2d(48, 64, kernel_size=2, stride=1, padding='valid')
+
+            self.fc1 = nn.Linear(256, 128, bias=False)
+            self.fc2 = nn.Linear(128, 2, bias=False)
+            self.fc3 = nn.Linear(128, 4, bias=False)
+        elif binary:
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 28, kernel_size=3, stride=1, padding='valid')
+            self.conv2 = binarized_modules.BinarizeConv2d(28, 48, kernel_size=3, stride=1, padding='valid')
+            self.conv3 = binarized_modules.BinarizeConv2d(48, 64, kernel_size=2, stride=1, padding='valid')
+
+            self.fc1 = binarized_modules.BinarizeLinear(256, 128, bias=False)
+            self.fc2 = binarized_modules.BinarizeLinear(128, 2, bias=False)
+            self.fc3 = binarized_modules.BinarizeLinear(128, 4, bias=False)
+        else:
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 28, kernel_size=3, stride=1, padding='valid')
+            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 28, 48, kernel_size=3, stride=1, padding='valid', align=align)
+            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 48, 64, kernel_size=2, stride=1, padding='valid', align=align)
+
+            self.fc1 = binarized_modules.TernarizeLinear(first_sparsity, 256, 128, bias=False, align=align)
+            self.fc2 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 2, bias=False, align=align)
+            self.fc3 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 4, bias=False, align=align)
+
+        self.softmax1 = torch.nn.Softmax(dim = 1)
+
+        self.pool1 = nn.MaxPool2d(kernel_size=3, stride=2, padding=(0, 0)) #TODO: Find the padding for "SAME"
+        self.pool2 = nn.MaxPool2d(kernel_size=3, stride=2, padding=(0, 0))
+        
+    def forward(self, x):
+        if self.full:
+            x = x.type(torch.FloatTensor)
+            x = F.relu(self.conv1(x))
+            x = self.pool1(x)
+
+            x = x.type(torch.FloatTensor)
+            x = F.relu(self.conv2(x))
+            x = self.pool2(x)
+
+            x = x.type(torch.FloatTensor)
+            x = F.relu(self.conv3(x))
+            x = torch.flatten(x, start_dim=1)
+
+            x = F.relu(self.fc1(x))
+
+            out1 = self.softmax1(self.fc2(x))
+            out2 = self.fc3(x)
+
+            out1, out2 = out1.type(torch.DoubleTensor), out2.type(torch.DoubleTensor)
+        else:
+            x = x.type(torch.FloatTensor)
+            x = self.conv1(x)
+            x = self.pool1(x)
+
+            x = x.type(torch.FloatTensor)
+            x = self.conv2(x)
+            x = self.pool2(x)
+
+            x = x.type(torch.FloatTensor)
+            x = self.conv3(x)
+            x = torch.flatten(x, start_dim=1)
+
+            x = self.fc1(x)
+
+            out1 = self.softmax1(self.fc2(x))
+            out2 = self.fc3(x)
+
+            out1, out2 = out1.type(torch.DoubleTensor), out2.type(torch.DoubleTensor)
+
+        return out1, out2
 
 class FC_small(nn.Module):
     def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, hid=512, ind=784, align=False):
