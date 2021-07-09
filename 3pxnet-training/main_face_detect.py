@@ -9,44 +9,57 @@ from torch.autograd import Variable
 import numpy as np
 from utils import *
 
+torch.manual_seed(0)
+np.random.seed(0)
+
 def calcAccuracy(pred_score, actual_score):
 	acc = torch.mean((torch.argmax(pred_score, dim=1) == actual_score).type(torch.FloatTensor))
 	return acc
 
 def forward(data_loader, model, score_criterion, box_landmark_criterion, epoch=0, training=True, optimizer=None, verbal=False):
+   isOnet = isinstance(model, network.onet)
+
    score_losses = AverageMeter()
    box_losses = AverageMeter()
+   if isOnet:
+      landmark_losses = AverageMeter()
    score_accs = AverageMeter()
-   #top1 = AverageMeter()
-   #top5 = AverageMeter()
 
    for i, (inputs, (score, box, landmark)) in enumerate(data_loader):
       # measure data loading time.
 
       score = score.to(model.conv1.weight.device)
       box = box.to(model.conv1.weight.device)
-      landmark = landmark.to(model.conv1.weight.device)
+      if isOnet:
+         landmark = landmark.to(model.conv1.weight.device)
       
       input_var = Variable(inputs.to(model.conv1.weight.device))
       score_var = Variable(score).type(torch.DoubleTensor)
       box_var = Variable(box)
+      if isOnet:
+         landmark_var = Variable(landmark)
 
       # compute output
-      score_out, box_out = model(input_var)
+      if not isOnet:
+         score_out, box_out = model(input_var)
+      else:
+         score_out, box_out, landmark_out = model(input_var)
 
       score_acc = calcAccuracy(score_out, torch.argmax(score_var, dim=1))
 
       score_loss = score_criterion(score_out, score_var)
       box_loss = box_landmark_criterion(box_out, box_var)*1e3
       loss = score_loss + box_loss
+      if isOnet:
+         landmark_loss = box_landmark_criterion(landmark_out, landmark_var)*1e3
+         loss += landmark_loss
 
       # measure accuracy and record loss
       score_losses.update(score_loss.item(), inputs.size(0))
       box_losses.update(box_loss.item(), inputs.size(0))
       score_accs.update(score_acc, inputs.size(0))
-      #prec1, prec5 = accuracy(score_out.data, score, topk=(1, 5))
-      #top1.update(prec1.item(), inputs.size(0))
-      #top5.update(prec5.item(), inputs.size(0))
+      if isOnet:
+         landmark_losses.update(landmark_loss.item(), inputs.size(0))
 
       if training:
          # compute gradient and do SGD step
@@ -62,11 +75,19 @@ def forward(data_loader, model, score_criterion, box_landmark_criterion, epoch=0
                p.weight_org.copy_(p.weight.data.clamp_(-1,1))
    if not training:
       if verbal:
-         print('Epoch: [{0}]\t'
-               'Score loss {score_loss.val:.4f} ({score_loss.avg:.4f})\t'
-               'Box loss {box_loss.val:.4f} ({box_loss.avg:.4f})\t'
-               'Score acc {score_acc.val:.4f} ({score_acc.avg:.4f})\t'.format(
-            epoch, score_loss=score_losses, box_loss=box_losses, score_acc=score_accs))
+         if isOnet:
+            print('Epoch: [{0}]\t'
+                  'Score loss {score_loss.avg:.4f}\t'
+                  'Box loss {box_loss.avg:.4f}\t'
+                  'Landmark loss {landmark_loss.avg:.4f}\t'
+                  'Score acc {score_acc.avg:.4f}\t'.format(
+               epoch, score_loss=score_losses, box_loss=box_losses, landmark_loss=landmark_losses, score_acc=score_accs))
+         else:
+            print('Epoch: [{0}]\t'
+                  'Score loss {score_loss.avg:.4f}\t'
+                  'Box loss {box_loss.avg:.4f}\t'
+                  'Score acc {score_acc.avg:.4f}\t'.format(
+               epoch, score_loss=score_losses, box_loss=box_losses, score_acc=score_accs))
 
    return score_losses.avg, box_losses.avg
 
@@ -80,20 +101,30 @@ def validate(data_loader, model, score_criterion, box_landmark_criterion, epoch,
    model.eval()
    return forward(data_loader, model, score_criterion, box_landmark_criterion, epoch, training=False, optimizer=None, verbal=verbal)
 
-full = True
+full = False
 binary = True
 batch=32
 pack = 32
+model = 'rnet'
 
-trainset, testset, classes = utils_own.load_dataset('CELEBA_pnet')
-net = network.pnet(full=full, binary=binary)
-#trainset, testset, classes = utils_own.load_dataset('CELEBA_rnet')
-#net = network.rnet(full=full, binary=binary)
+if model == 'pnet':
+   trainset, testset, classes = utils_own.load_dataset('CELEBA_pnet')
+   net = network.pnet(full=full, binary=binary)
+elif model == 'rnet':
+   trainset, testset, classes = utils_own.load_dataset('CELEBA_rnet')
+   net = network.rnet(full=full, binary=binary)
+elif model == 'onet':
+   trainset, testset, classes = utils_own.load_dataset('CELEBA_onet')
+   net = network.onet(full=full, binary=binary)
+else:
+   raise Exception("Invalid model name %s" % model)
+
+
 
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch, shuffle=True, num_workers=2)
 testloader = torch.utils.data.DataLoader(testset, batch_size=batch, shuffle=False, num_workers=2)
 
-learning_rate = 1e-3
+learning_rate = 1e-4
 score_criterion = nn.BCEWithLogitsLoss()
 box_landmark_criterion = nn.MSELoss()
 lr_decay = np.power((2e-6/learning_rate), (1./100))
@@ -120,6 +151,7 @@ for epoch in range(0, epochs):
   val_score_loss, val_box_loss = validate(testloader, net, score_criterion, box_landmark_criterion, epoch, verbal=True)
   scheduler.step()
 
+"""
 utils_own.adjust_pack(net, 1)
 utils_own.permute_all_weights_once(net, pack=pack, mode=-1)
 
@@ -151,3 +183,4 @@ for epoch in range(0, epochs):
      lowest_loss = val_score_loss + val_box_loss
      torch.save(net, save_file)
   scheduler.step()
+"""

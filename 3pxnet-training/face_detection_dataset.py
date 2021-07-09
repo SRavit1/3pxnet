@@ -42,6 +42,8 @@ class FaceLandmarksDataset(torch.utils.data.Dataset):
             self.all_landmark_data = self.all_landmark_data[cutoff:]
             self.all_score_data = self.all_score_data[cutoff:]
 
+        self.all_image_data = self.all_image_data.astype(np.float32)
+        self.all_image_data /= 255
         self.len = len(self.all_image_data)
 
     def __len__(self):
