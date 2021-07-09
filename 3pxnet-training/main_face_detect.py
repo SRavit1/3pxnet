@@ -34,7 +34,7 @@ def forward(data_loader, model, score_criterion, box_landmark_criterion, epoch=0
          landmark = landmark.to(model.conv1.weight.device)
       
       input_var = Variable(inputs.to(model.conv1.weight.device))
-      score_var = Variable(score).type(torch.DoubleTensor)
+      score_var = Variable(score)
       box_var = Variable(box)
       if isOnet:
          landmark_var = Variable(landmark)

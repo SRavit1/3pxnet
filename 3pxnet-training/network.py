@@ -66,7 +66,6 @@ class pnet(nn.Module):
         
     def forward(self, x):
         #TODO: take full, binary parameters into account
-        x = x.type(torch.FloatTensor)
         if self.full:
             x = F.relu(self.conv1(x))
             x = self.pool1(x)
@@ -105,7 +104,7 @@ class pnet(nn.Module):
             out1 = torch.reshape(out1, (-1, 2))
             out2 = torch.reshape(out2, (-1, 4))
 
-        out1, out2 = out1.type(torch.DoubleTensor), out2.type(torch.DoubleTensor)
+        #out1, out2 = out1.type(torch.DoubleTensor), out2.type(torch.DoubleTensor)
         return out1, out2    
 
 class rnet(nn.Module):
@@ -118,7 +117,7 @@ class rnet(nn.Module):
         self.binary = binary
 
         if full:
-            self.conv1 = nn.Conv2d(32, 28, kernel_size=3, stride=1, padding='valid')
+            self.conv1 = nn.Conv2d(3, 28, kernel_size=3, stride=1, padding='valid')
             self.conv2 = nn.Conv2d(28, 48, kernel_size=3, stride=1, padding='valid')
             self.conv3 = nn.Conv2d(48, 64, kernel_size=2, stride=1, padding='valid')
 
@@ -156,7 +155,6 @@ class rnet(nn.Module):
         self.htanh6 = nn.Hardtanh(inplace=True)
         
     def forward(self, x):
-        x = x.type(torch.FloatTensor)
         if self.full:
             x = F.relu(self.conv1(x))
             x = self.pool1(x)
@@ -197,8 +195,6 @@ class rnet(nn.Module):
             
             out2 = self.fc3(x)
             out2 = self.htanh6(out2)
-
-        out1, out2 = out1.type(torch.DoubleTensor), out2.type(torch.DoubleTensor)
 
         return out1, out2
 
@@ -260,7 +256,6 @@ class onet(nn.Module):
         self.htanh7 = nn.Hardtanh(inplace=True)
         
     def forward(self, x):
-        x = x.type(torch.FloatTensor)
         if self.full:
             x = F.relu(self.conv1(x))
             x = self.pool1(x)
@@ -307,8 +302,6 @@ class onet(nn.Module):
             out2 = self.htanh6(out2)
             out3 = self.fc4(x)
             out3 = self.htanh7(out3)
-
-        out1, out2, out3 = out1.type(torch.DoubleTensor), out2.type(torch.DoubleTensor), out3.type(torch.DoubleTensor)
 
         return out1, out2, out3
 
