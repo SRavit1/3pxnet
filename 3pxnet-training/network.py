@@ -38,7 +38,7 @@ class pnet(nn.Module):
             self.conv2 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding='valid')
             self.conv3 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding='valid')
             self.conv4 = binarized_modules.BinarizeConv2d(32, 2, kernel_size=1, stride=1, padding='valid')
-            self.conv5 = binarized_modules.BinarizeConv2d(32, 4, kernel_size=1, stride=1, padding='valid')
+            self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding='valid')
         """
         else:
             self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding='valid')
@@ -90,16 +90,16 @@ class pnet(nn.Module):
             #x = F.relu(self.conv1(x))
             x = self.conv1(x)
             x = self.pool1(x)
-            x = self.htanh1(x)
+            self.htanh1(x)
             x = self.conv2(x)
-            x = self.htanh2(x)
+            self.htanh2(x)
             x = self.conv3(x)
-            x = self.htanh3(x)
+            self.htanh3(x)
             out1 = self.conv4(x)
-            #out1 = self.htanh4(out1)
+            #self.htanh4(out1)
             out1 = self.softmax1(out1)
             out2 = self.conv5(x)
-            x = self.htanh5(out2)
+            self.htanh5(out2)
 
             out1 = torch.reshape(out1, (-1, 2))
             out2 = torch.reshape(out2, (-1, 4))
@@ -131,7 +131,7 @@ class rnet(nn.Module):
 
             self.fc1 = binarized_modules.BinarizeLinear(256, 128)
             self.fc2 = binarized_modules.BinarizeLinear(128, 2)
-            self.fc3 = binarized_modules.BinarizeLinear(128, 4)
+            self.fc3 = nn.Linear(128, 4)
         """
         else:
             self.conv1 = binarized_modules.BinarizeConv2d(3, 28, kernel_size=3, stride=1, padding='valid')
@@ -178,23 +178,23 @@ class rnet(nn.Module):
 
             x = self.conv1(x)
             x = self.pool1(x)
-            x = self.htanh1(x)
+            self.htanh1(x)
             x = self.conv2(x)
             x = self.pool2(x)
-            x = self.htanh2(x)
+            self.htanh2(x)
             x = self.conv3(x)
-            x = self.htanh3(x)
+            self.htanh3(x)
             x = torch.flatten(x, start_dim=1)
 
             x = self.fc1(x)
-            x = self.htanh4(x)
+            self.htanh4(x)
 
             out1 = self.fc2(x)
-            #x = self.htanh5(x)
+            #self.htanh5(x)
             out1 = self.softmax1(out1)
             
             out2 = self.fc3(x)
-            out2 = self.htanh6(out2)
+            self.htanh6(out2)
 
         return out1, out2
 
@@ -226,8 +226,8 @@ class onet(nn.Module):
 
             self.fc1 = binarized_modules.BinarizeLinear(1152, 256)
             self.fc2 = binarized_modules.BinarizeLinear(256, 2)
-            self.fc3 = binarized_modules.BinarizeLinear(256, 4)
-            self.fc4 = binarized_modules.BinarizeLinear(256, 10)
+            self.fc3 = nn.Linear(256, 4)
+            self.fc4 = nn.Linear(256, 10)
         """
         else:
             self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding='valid')
@@ -282,26 +282,26 @@ class onet(nn.Module):
 
             x = self.conv1(x)
             x = self.pool1(x)
-            x = self.htanh1(x)
+            self.htanh1(x)
             x = self.conv2(x)
             x = self.pool2(x)
-            x = self.htanh2(x)
+            self.htanh2(x)
             x = self.conv3(x)
             x = self.pool3(x)
-            x = self.htanh3(x)
+            self.htanh3(x)
             x = self.conv4(x)
-            x = self.htanh4(x)
+            self.htanh4(x)
             x = torch.flatten(x, start_dim=1)
 
             x = F.relu(self.fc1(x))
             
             out1 = self.fc2(x)
-            #out1 = self.htanh5(out1)
+            #self.htanh5(out1)
             out1 = self.softmax1(out1)
             out2 = self.fc3(x)
-            out2 = self.htanh6(out2)
+            self.htanh6(out2)
             out3 = self.fc4(x)
-            out3 = self.htanh7(out3)
+            self.htanh7(out3)
 
         return out1, out2, out3
 
@@ -347,7 +347,7 @@ class FC_small(nn.Module):
             else:
                 x = self.fc1(x, self.pruned)
             x = self.bn1(x)
-            x = self.htanh1(x)
+            self.htanh1(x)
             if self.binary:
                 x = self.fc2(x)
             else:
@@ -414,19 +414,19 @@ class FC_large(nn.Module):
             else:
                 x = self.fc1(x, self.pruned)
             x = self.bn1(x)
-            x = self.htanh1(x)
+            self.htanh1(x)
             if self.binary:
                 x = self.fc2(x)
             else:
                 x = self.fc2(x, self.pruned)
             x = self.bn2(x)
-            x = self.htanh2(x)
+            self.htanh2(x)
             if self.binary:
                 x = self.fc3(x)
             else:
                 x = self.fc3(x, self.pruned)
             x = self.bn3(x)
-            x = self.htanh3(x)
+            self.htanh3(x)
             if self.binary:
                 x = self.fc4(x)
             else:
@@ -540,7 +540,7 @@ class CNN_medium(nn.Module):
             x = F.pad(x, (1,1,1,1), value=self.pad)
             x = self.conv1(x)
             x = self.bn1(x)
-            x = self.htanh1(x)
+            self.htanh1(x)
             
             x = F.pad(x, (1,1,1,1), value=self.pad)
             if self.binary:
@@ -549,7 +549,7 @@ class CNN_medium(nn.Module):
                 x = self.conv2(x, self.pruned)
             x = self.pool2(x)
             x = self.bn2(x)
-            x = self.htanh2(x)
+            self.htanh2(x)
             
             x = F.pad(x, (1,1,1,1), value=self.pad)
             if self.binary:
@@ -557,7 +557,7 @@ class CNN_medium(nn.Module):
             else:
                 x = self.conv3(x, self.pruned)
             x = self.bn3(x)
-            x = self.htanh3(x)
+            self.htanh3(x)
             
             x = F.pad(x, (1,1,1,1), value=self.pad)
             if self.binary:
@@ -566,7 +566,7 @@ class CNN_medium(nn.Module):
                 x = self.conv4(x, self.pruned)
             x = self.pool4(x)
             x = self.bn4(x)
-            x = self.htanh4(x)
+            self.htanh4(x)
             
             x = F.pad(x, (1,1,1,1), value=self.pad)
             if self.binary:
@@ -574,7 +574,7 @@ class CNN_medium(nn.Module):
             else:
                 x = self.conv5(x, self.pruned)
             x = self.bn5(x)
-            x = self.htanh5(x)
+            self.htanh5(x)
             
             x = F.pad(x, (1,1,1,1), value=self.pad)
             if self.binary:
@@ -583,7 +583,7 @@ class CNN_medium(nn.Module):
                 x = self.conv6(x, self.pruned)
             x = self.pool6(x)
             x = self.bn6(x)
-            x = self.htanh6(x)
+            self.htanh6(x)
             
             if self.binary:
                 x = self.conv7(x)
@@ -717,7 +717,7 @@ class CNN_large(nn.Module):
             x = F.pad(x, (1,1,1,1), value=self.pad)
             x = self.conv1(x)
             x = self.bn1(x)
-            x = self.htanh1(x)
+            self.htanh1(x)
             
             x = F.pad(x, (1,1,1,1), value=self.pad)
             if self.binary:
@@ -726,7 +726,7 @@ class CNN_large(nn.Module):
                 x = self.conv2(x, self.pruned)
             x = self.pool2(x)
             x = self.bn2(x)
-            x = self.htanh2(x)
+            self.htanh2(x)
             
             x = F.pad(x, (1,1,1,1), value=self.pad)
             if self.binary:
@@ -734,7 +734,7 @@ class CNN_large(nn.Module):
             else:
                 x = self.conv3(x, self.pruned)
             x = self.bn3(x)
-            x = self.htanh3(x)
+            self.htanh3(x)
             
             x = F.pad(x, (1,1,1,1), value=self.pad)
             if self.binary:
@@ -743,7 +743,7 @@ class CNN_large(nn.Module):
                 x = self.conv4(x, self.pruned)
             x = self.pool4(x)
             x = self.bn4(x)
-            x = self.htanh4(x)
+            self.htanh4(x)
             
             x = F.pad(x, (1,1,1,1), value=self.pad)
             if self.binary:
@@ -751,7 +751,7 @@ class CNN_large(nn.Module):
             else:
                 x = self.conv5(x, self.pruned)
             x = self.bn5(x)
-            x = self.htanh5(x)
+            self.htanh5(x)
             
             x = F.pad(x, (1,1,1,1), value=self.pad)
             if self.binary:
@@ -760,7 +760,7 @@ class CNN_large(nn.Module):
                 x = self.conv6(x, self.pruned)
             x = self.pool6(x)
             x = self.bn6(x)
-            x = self.htanh6(x)
+            self.htanh6(x)
             
             if self.binary:
                 x = self.conv7(x)
@@ -769,14 +769,14 @@ class CNN_large(nn.Module):
             print(x.shape)
             x = x.view(-1, 1024)
             x = self.bnfc1(x)
-            x = self.htanhfc1(x)
+            self.htanhfc1(x)
 
             if self.binary:
                 x = self.fc1(x)
             else:
                 x = self.fc1(x, self.pruned)
             x = self.bnfc2(x)
-            x = self.htanhfc2(x)
+            self.htanhfc2(x)
             
             if self.binary:
                 x = self.fc2(x)
@@ -834,7 +834,7 @@ class CNN_tiny(nn.Module):
             x = self.conv1(x)
             x = self.pool1(x)
             x = self.bn1(x)
-            x = self.htanh1(x)
+            self.htanh1(x)
             
             if self.binary:
                 x = self.conv2(x)
@@ -842,7 +842,7 @@ class CNN_tiny(nn.Module):
                 x = self.conv2(x, self.pruned)
             x = self.pool2(x)
             x = self.bn2(x)
-            x = self.htanh2(x)
+            self.htanh2(x)
             
             if self.binary:
                 x = self.fc1(x)

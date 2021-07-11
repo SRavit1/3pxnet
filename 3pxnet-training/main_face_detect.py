@@ -145,7 +145,7 @@ utils_own.adjust_pack(net, 1)
 optimizer = optim.Adam(net.parameters(), lr=learning_rate)
 scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
 
-epochs = 25
+epochs = 50
 for epoch in range(0, epochs):
   train_score_loss, train_box_loss = train(trainloader, net, score_criterion, box_landmark_criterion, epoch, optimizer)
   val_score_loss, val_box_loss = validate(testloader, net, score_criterion, box_landmark_criterion, epoch, verbal=True)

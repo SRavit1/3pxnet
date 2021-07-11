@@ -28,7 +28,7 @@ class FaceLandmarksDataset(torch.utils.data.Dataset):
         elif model == 'onet':
             self.all_image_data = all_image_data
         else:
-            raise Exception("inappropriate model name")
+            raise Exception("Invalid model name %s" % model)
 
         cutoff = int(len(self.all_image_data)*0.9)
         if train:
