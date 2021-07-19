@@ -105,7 +105,7 @@ full = False
 binary = True
 batch=32
 pack = 32
-model = 'rnet'
+model = 'onet'
 
 if model == 'pnet':
    trainset, testset, classes = utils_own.load_dataset('CELEBA_pnet')
@@ -138,7 +138,7 @@ else:
 		extension = "_binary"
 	else:
 		extension = "_ternary"
-save_file = "p_net_model"+extension+".pt"
+save_file = model + "_model" + extension + ".pt"
 
 utils_own.adjust_pack(net, 1)
 
@@ -150,6 +150,8 @@ for epoch in range(0, epochs):
   train_score_loss, train_box_loss = train(trainloader, net, score_criterion, box_landmark_criterion, epoch, optimizer)
   val_score_loss, val_box_loss = validate(testloader, net, score_criterion, box_landmark_criterion, epoch, verbal=True)
   scheduler.step()
+
+torch.save(net, save_file)
 
 """
 utils_own.adjust_pack(net, 1)
