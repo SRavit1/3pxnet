@@ -253,7 +253,7 @@ for (modelName, model) in models:
     train_score_loss, train_box_loss = train(trainloader, net, score_criterion, box_landmark_criterion, epoch, optimizer)
     val_score_loss, val_box_loss = validate(testloader, net, score_criterion, box_landmark_criterion, epoch, verbal=True)
 
-    # remember best prec@1 and save checkpoint
+    # remember best loss and save checkpoint
     is_best = val_score_loss + val_box_loss < lowest_loss
     if is_best:
        lowest_loss = val_score_loss + val_box_loss

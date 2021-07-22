@@ -31,6 +31,12 @@ class pnet(nn.Module):
             self.conv3 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding='valid')
             self.conv4 = binarized_modules.BinarizeConv2d(32, 2, kernel_size=1, stride=1, padding='valid')
             self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding='valid')
+        else:
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding='valid')
+            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding='valid', align=align)
+            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding='valid', align=align)
+            self.conv4 = binarized_modules.BinarizeConv2d(32, 2, kernel_size=1, stride=1, padding='valid')
+            self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding='valid')
 
         self.softmax1 = torch.nn.Softmax(dim = 1)
 
@@ -104,6 +110,13 @@ class rnet(nn.Module):
             self.fc1 = binarized_modules.BinarizeLinear(256, 128)
             self.fc2 = binarized_modules.BinarizeLinear(128, 2)
             self.fc3 = nn.Linear(128, 4)
+        else:
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 28, kernel_size=3, stride=1, padding='valid')
+            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 28, 48, kernel_size=3, stride=1, padding='valid', align=align)
+            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 48, 64, kernel_size=2, stride=1, padding='valid', align=align)
+            self.fc1 = binarized_modules.TernarizeLinear(first_sparsity, 256, 128, align=align)
+            self.fc2 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 2, align=align)
+            self.fc3 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 4, align=align)
 
         self.softmax1 = torch.nn.Softmax(dim = 1)
 
@@ -189,6 +202,15 @@ class onet(nn.Module):
             self.fc2 = binarized_modules.BinarizeLinear(128, 2)
             self.fc3 = nn.Linear(128, 4)
             self.fc4 = nn.Linear(128, 10)
+        else:
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding='valid')
+            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding='valid', align=align)
+            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding='valid', align=align)
+            #self.conv4 = binarized_modules.TernarizeConv2d(conv_thres, 32, 128, kernel_size=2, stride=1, padding='valid', align=align)
+            self.fc1 = binarized_modules.TernarizeLinear(first_sparsity, 2048, 128, align=align)
+            self.fc2 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 2, align=align)
+            self.fc3 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 4, align=align)
+            self.fc4 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 10, align=align)
 
         self.softmax1 = torch.nn.Softmax(dim = 1)
 
