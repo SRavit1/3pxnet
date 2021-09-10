@@ -9,6 +9,7 @@ import utils
 import utils_own
 
 import binarized_modules
+import binarized_modules_multi
 
 class pnet(nn.Module):
     def __init__(self, full=False, binary=True, conv_thres=0.7, align=False):
@@ -948,27 +949,27 @@ class DeepAutoEncoder(nn.Module):
         self.fc9 = nn.Linear(hid, hid, bias=False)
         self.fc10 = nn.Linear(hid, ind, bias=False)
       elif binary:
-        self.fc1 = binarized_modules.BinarizeLinear(1, 1, ind, hid, bias=False)
-        self.fc2 = binarized_modules.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc3 = binarized_modules.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc4 = binarized_modules.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc5 = binarized_modules.BinarizeLinear(1, 1, hid, mid, bias=False)
-        self.fc6 = binarized_modules.BinarizeLinear(1, 1, mid, hid, bias=False)
-        self.fc7 = binarized_modules.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc8 = binarized_modules.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc9 = binarized_modules.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc10 = binarized_modules.BinarizeLinear(1, 1, hid, ind, bias=False)
+        self.fc1 = binarized_modules_multi.BinarizeLinear(1, 1, ind, hid, bias=False)
+        self.fc2 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
+        self.fc3 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
+        self.fc4 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
+        self.fc5 = binarized_modules_multi.BinarizeLinear(1, 1, hid, mid, bias=False)
+        self.fc6 = binarized_modules_multi.BinarizeLinear(1, 1, mid, hid, bias=False)
+        self.fc7 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
+        self.fc8 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
+        self.fc9 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
+        self.fc10 = binarized_modules_multi.BinarizeLinear(1, 1, hid, ind, bias=False)
       else:
-        self.fc1 = binarized_modules.TernarizeLinear(sparsity, 1, 1, ind, hid, bias=False, align=self.align)
-        self.fc2 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        self.fc3 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        self.fc4 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        self.fc5 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, mid, bias=False, align=self.align)
-        self.fc6 = binarized_modules.TernarizeLinear(sparsity, 1, 1, mid, hid, bias=False, align=self.align)
-        self.fc7 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        self.fc8 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        self.fc9 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        self.fc10 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, ind, bias=False, align=self.align)
+        self.fc1 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, ind, hid, bias=False, align=self.align)
+        self.fc2 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
+        self.fc3 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
+        self.fc4 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
+        self.fc5 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, mid, bias=False, align=self.align)
+        self.fc6 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, mid, hid, bias=False, align=self.align)
+        self.fc7 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
+        self.fc8 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
+        self.fc9 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
+        self.fc10 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, ind, bias=False, align=self.align)
 
       self.batchnorm1 = nn.BatchNorm1d(hid)
       self.batchnorm2 = nn.BatchNorm1d(hid)
@@ -980,6 +981,7 @@ class DeepAutoEncoder(nn.Module):
       self.batchnorm8 = nn.BatchNorm1d(hid)
       self.batchnorm9 = nn.BatchNorm1d(hid)
       self.batchnorm10 = nn.BatchNorm1d(ind)
+
     def forward(self, x):
         x = self.fc1(x)
         x = self.batchnorm1(x)

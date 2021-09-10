@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 
-import binarized_modules
+import binarized_modules_multi as binarized_modules
 import esp_dl_utils
 import utils
 import utils_own

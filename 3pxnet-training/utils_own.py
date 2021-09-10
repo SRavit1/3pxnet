@@ -7,9 +7,12 @@ import numpy as np
 from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
+import sklearn.metrics
 
 import face_detection_dataset
+import anomaly_detection_common as com
 
+import random
 import time
 try:
    from .utils import *
@@ -196,6 +199,10 @@ def load_dataset(dataset):
       trainset = face_detection_dataset.FaceLandmarksDataset(root='./data', train=True, transform=transform, model='onet')
       testset = face_detection_dataset.FaceLandmarksDataset(root='./data', train=False, transform=transform, model='onet')
       classes = ('not face', 'face')
+   elif dataset == 'ToyADMOS':
+      trainset = AnomalyDetectionDataset("./data/ToyCar/train")
+      testset = AnomalyDetectionDataset("./data/ToyCar/test")
+      classes = ('normal', 'anomaly')
 
    return trainset, testset, classes
 
