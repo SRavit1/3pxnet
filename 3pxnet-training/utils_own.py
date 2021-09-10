@@ -104,6 +104,43 @@ def permute_from_list(mask, permute_list, transpose=False):
       mask_unpermute = mask_unpermute.view(mask.size(0), mask.size(2), mask.size(3), mask.size(1)).permute(0,3,1,2)
    return mask_unpermute
 
+class AnomalyDetectionDataset(torch.utils.data.Dataset):
+    def __init__(self, data_dir):
+        self.files = os.listdir(data_dir)
+        self.files = [os.path.join(data_dir, file) for file in self.files]
+        random.shuffle(self.files)
+
+        self.files_len = 1000
+        self.samples_per_file = 196
+        self.len = self.files_len*self.samples_per_file
+        self.dim = 640
+        self.files = self.files[:self.files_len]
+
+        self.inputs = np.empty((self.len, self.dim), dtype=np.float32)
+        self.labels = np.empty((self.len), dtype=np.float32)
+
+        for i in range(len(self.files)):
+          print("\rBuilding dataset. File {0}/{1}.".format(i, self.files_len), end='')
+          file = self.files[i]
+          label = 1 if "anomaly" in file else 0
+
+          data = com.file_to_vector_array(file, n_mels=128, frames=5, n_fft=1024, hop_length=512, power=2.0).astype(np.float32)
+          data /= (data.max() - data.min())
+
+          self.inputs[i*self.samples_per_file:(i+1)*self.samples_per_file] = data
+          self.labels[i*self.samples_per_file:(i+1)*self.samples_per_file] = label
+        print()
+
+        perm = np.random.permutation(self.len)
+        self.inputs = self.inputs[perm]
+        self.labels = self.labels[perm]
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, index):
+        return self.inputs[index], self.labels[index]
+
 def load_dataset(dataset):
    '''
    Give training/testing data loader and class information for several image datasets
@@ -268,3 +305,9 @@ def adjust_pack(net, pack):
    for mod in net.modules():
       if hasattr(mod, 'pack'):
          mod.pack -= mod.pack - pack
+
+def auc_metric(labels_pred, labels):
+  #fpr, tpr, thresholds = sklearn.metrics.roc_curve(labels, labels_pred)
+  #auc_score = sklearn.metrics.auc(fpr, tpr)
+  auc_score = sklearn.metrics.roc_auc_score(labels, labels_pred)
+  return auc_score
