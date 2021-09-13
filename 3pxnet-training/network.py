@@ -932,8 +932,8 @@ class DeepAutoEncoder(nn.Module):
       self.pruned = False
 
       ind = 640
-      hid = 64 #128
-      mid = 32 #8
+      hid = 128
+      mid = 8
 
       self.act = F.relu if self.full else nn.Hardtanh()
       

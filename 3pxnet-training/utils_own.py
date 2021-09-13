@@ -113,7 +113,7 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
         self.files = [os.path.join(data_dir, file) for file in self.files]
         random.shuffle(self.files)
 
-        self.files_len = 1000
+        self.files_len = len(self.files)#1000
         self.samples_per_file = 196
         self.len = self.files_len*self.samples_per_file
         self.dim = 640
@@ -128,7 +128,7 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
           label = 1 if "anomaly" in file else 0
 
           data = com.file_to_vector_array(file, n_mels=128, frames=5, n_fft=1024, hop_length=512, power=2.0).astype(np.float32)
-          data /= (data.max() - data.min())
+          data = (data - data.min())  / (data.max() - data.min())
 
           self.inputs[i*self.samples_per_file:(i+1)*self.samples_per_file] = data
           self.labels[i*self.samples_per_file:(i+1)*self.samples_per_file] = label
