@@ -90,7 +90,7 @@ def permute_from_list(mask, permute_list, transpose=False):
       mask_flat = mask.permute(0,2,3,1).contiguous().view(-1, mask.size(1)).contiguous()
    else:
       mask_flat = mask.clone()
-   split_size = int(np.ceil(float(mask_flat.size(0))/permute_redund).astype(int))
+   split_size = int(np.ceil(float(mask_flat.size(0)/permute_redund)).astype(int))
    mask_unpermute = torch.zeros_like(mask_flat)
    length = permute_list.size(1)
    mask_split = torch.split(mask_flat, split_size)
