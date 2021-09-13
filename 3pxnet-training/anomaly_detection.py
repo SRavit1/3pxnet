@@ -131,7 +131,7 @@ def train(models):
 def save_onnx(models):
     for (modelName, model) in models:
       onnxFilename = "training_data/" + modelName + ".onnx"
-      x=Variable(torch.randn(1,576,requires_grad=True).to(device))
+      x=Variable(torch.randn(1,640,requires_grad=True).to(device))
       torch.onnx.export(model,x,onnxFilename,verbose=True,opset_version=9,input_names = ['input'], output_names = ['output'])
 
 def write_esp_dl_headers(models):
