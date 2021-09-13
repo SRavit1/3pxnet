@@ -131,8 +131,12 @@ def train(models):
 def save_onnx(models):
     for (modelName, model) in models:
       onnxFilename = "training_data/" + modelName + ".onnx"
-      x=Variable(torch.randn(1,576,requires_grad=True).to(device))
-      torch.onnx.export(model,x,onnxFilename,verbose=True,opset_version=9,input_names = ['input'], output_names = ['output'])
+      x=Variable(torch.randn(32,640,requires_grad=True).to(device))
+      #in binarized/ternarized layers, model.forward is necessary for weights to be appropriately binarized and sparsified
+      with torch.no_grad():
+        torch_pred = model.forward(x).cpu().detach().numpy().flatten()
+        print(modelName, "torch prediction", torch_pred[:10])
+      torch.onnx.export(model,x,onnxFilename,opset_version=9,input_names = ['input'], output_names = ['output'])
 
 def write_esp_dl_headers(models):
     for (modelName, model) in models:
@@ -205,7 +209,7 @@ if __name__ == "__main__":
     prefix = "dae_"
     models = [(prefix + "full", full_model), (prefix + "binarized", binarized_model), (prefix + "ternarized_low", ternarized_low_model), (prefix + "ternarized_medium", ternarized_medium_model), (prefix + "ternarized_high", ternarized_high_model)]
 
-    train(models)
+    #train(models)
     save_onnx(models)
 
     log.close()
