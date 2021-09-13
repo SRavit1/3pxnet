@@ -38,3 +38,4 @@ source
 3pxnet-compiler/utils.py
 3pxnet-compiler/utils_own.py
 log.txt
+trained_models
