@@ -107,6 +107,8 @@ def train(models):
       lr_decay = np.power((2e-6/learning_rate), (1./100))
       optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
+      utils_own.adjust_pack(model, 1)
+
       history = {'loss': [], 'test loss': []}
       train_single(model, optimizer, dataset_loader, test_dataset_loader, loss_metric, EPOCHS, history)
 
@@ -209,7 +211,6 @@ if __name__ == "__main__":
 
     prefix = "dae_"
     models = [(prefix + "full", full_model), (prefix + "binarized", binarized_model), (prefix + "ternarized_low", ternarized_low_model), (prefix + "ternarized_medium", ternarized_medium_model), (prefix + "ternarized_high", ternarized_high_model)]
-    #models = models[0]
 
     train(models)
     save_onnx(models)

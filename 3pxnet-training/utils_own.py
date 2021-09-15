@@ -110,7 +110,8 @@ def permute_from_list(mask, permute_list, transpose=False):
 class AnomalyDetectionDataset(torch.utils.data.Dataset):
     def __init__(self, data_dir):
         self.files = os.listdir(data_dir)
-        self.files = [os.path.join(data_dir, file) for file in self.files]
+        #only using files with id from 1-4
+        self.files = [os.path.join(data_dir, file) for file in self.files if int(file.split("_")[-2]) in [1, 2, 3 ,4]]
         random.shuffle(self.files)
 
         self.files_len = len(self.files)#1000
