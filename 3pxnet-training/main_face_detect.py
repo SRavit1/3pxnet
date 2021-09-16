@@ -1,18 +1,14 @@
-import network
-import utils_own
-
 import torch
 from torch import nn
 import torch.optim as optim
 from torch.autograd import Variable
-
-from sklearn.metrics import accuracy_score, f1_score
-
 import numpy as np
-from utils import *
-
+from sklearn.metrics import accuracy_score, f1_score
 import os
 
+from utils import *
+import network
+import utils_own
 from face_detection_dataset import MTCNNTrainDataset
 from network import pnet, rnet, onet
 
@@ -61,37 +57,14 @@ def forward(data_loader, model, modelName, score_criterion, box_landmark_criteri
           message += 'Training landmark loss {landmark_loss.avg:.4f}\t'.format(landmark_loss=landmark_losses)
         print(message, end='')
 
-      if keras:
-        input_var = image.cpu().numpy()
-        input_var = np.transpose(input_var, (0, 2, 3, 1))
-        input_var = np.transpose(input_var, (0, 2, 1, 3))
-        #input_var = ((input_var+1)*255/2).astype(np.uint8)
-        score_var = score.cpu().numpy()
-        if box is not None:
-          box_var = box.cpu().numpy()
-        if modelName == "pnet":
-          score_var = torch.tensor(np.transpose(score_var, (0, 2, 3, 1)))
-          if box is not None:
-            box_var = torch.tensor(np.transpose(box_var, (0, 2, 3, 1)))
-        elif box is not None:
-          box_var = Variable(torch.tensor(box_var))
-
-        if modelName in ["pnet", "rnet"]:
-          box_out, score_out = model.predict(input_var)
-        else:
-          box_out, landmark_out, score_out = model.predict(input_var)
-          landmark_out = torch.tensor(landmark_out)
-        score_out = torch.tensor(score_out)
-        box_out = torch.tensor(box_out)
+      input_var = Variable(image)
+      score_var = Variable(score)
+      if box is not None:
+        box_var = Variable(box)
+      if modelName in ["pnet", "rnet"]:
+        score_out, box_out = model(input_var)
       else:
-        input_var = Variable(image)
-        score_var = Variable(score)
-        if box is not None:
-          box_var = Variable(box)
-        if modelName in ["pnet", "rnet"]:
-          score_out, box_out = model(input_var)
-        else:
-          score_out, box_out, landmark_out = model(input_var)
+        score_out, box_out, landmark_out = model(input_var)
       if landmark is not None:
         landmark_var = Variable(landmark)
 
@@ -202,8 +175,13 @@ testloader = MTCNNTrainDataset(root, data, batch_size=batch, train=False)
 
 full = True
 binary = True
+sparsity = 0.1
 
-models = [("pnet", pnet(full=full, binary=binary).to(device)), ("rnet", rnet(full=full, binary=binary).to(device)), ("onet", onet(full=full, binary=binary).to(device))]
+pnet_model = pnet(full=full, binary=binary, conv_thres=sparsity).to(device)
+rnet_model = rnet(full=full, binary=binary, first_sparsity=sparsity, rest_sparsity=sparsity, conv_thres=sparsity).to(device)
+onet_model = onet(full=full, binary=binary, first_sparsity=sparsity, rest_sparsity=sparsity, conv_thres=sparsity).to(device)
+
+models = [("pnet", pnet_model), ("rnet", rnet_model), ("onet", onet_model)]
 
 for (modelName, model) in models:
   print("Begin training", modelName, end='')
@@ -219,22 +197,21 @@ for (modelName, model) in models:
   optimizer = optim.Adam(model.parameters(), lr=learning_rate)
   scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
 
-  epochs = 50
-  for epoch in range(0, epochs):
+  EPOCHS = 50
+  for epoch in range(0, EPOCHS):
     train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer, verbal=True)
     val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
     scheduler.step()
 
   torch.save(model, save_file)
 
-  """
   utils_own.adjust_pack(net, 1)
   utils_own.permute_all_weights_once(net, pack=pack, mode=-1)
 
   optimizer = optim.Adam(net.parameters(), lr=learning_rate)
   scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
 
-  for epoch in range(0, epochs):
+  for epoch in range(0, EPOCHS):
     train_score_loss, train_box_loss = train(trainloader, net, score_criterion, box_landmark_criterion, epoch, optimizer)
     val_score_loss, val_box_loss = validate(testloader, net, score_criterion, box_landmark_criterion, epoch, verbal=True)
     scheduler.step()
@@ -249,7 +226,7 @@ for (modelName, model) in models:
   scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
   lowest_loss = 100 #starting value
 
-  for epoch in range(0, epochs):
+  for epoch in range(0, EPOCHS):
     train_score_loss, train_box_loss = train(trainloader, net, score_criterion, box_landmark_criterion, epoch, optimizer)
     val_score_loss, val_box_loss = validate(testloader, net, score_criterion, box_landmark_criterion, epoch, verbal=True)
 
@@ -259,4 +236,3 @@ for (modelName, model) in models:
        lowest_loss = val_score_loss + val_box_loss
        torch.save(net, save_file)
     scheduler.step()
-  """
