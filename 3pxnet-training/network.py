@@ -21,67 +21,42 @@ class pnet(nn.Module):
         self.binary = binary
 
         if full:
-            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding='valid')
-            self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding='valid')
-            self.conv3 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding='valid')
-            self.conv4 = nn.Conv2d(32, 2, kernel_size=1, stride=1, padding='valid')
-            self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding='valid')
+            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv3 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv4 = nn.Conv2d(32, 2, kernel_size=1, stride=1, padding=(0, 0), bias=False)
+            self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
         elif binary:
-            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding='valid')
-            self.conv2 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding='valid')
-            self.conv3 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding='valid')
-            self.conv4 = binarized_modules.BinarizeConv2d(32, 2, kernel_size=1, stride=1, padding='valid')
-            self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding='valid')
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv3 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv4 = binarized_modules.BinarizeConv2d(32, 2, kernel_size=1, stride=1, padding=(0, 0), bias=False)
+            self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
         else:
-            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding='valid')
-            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding='valid', align=align)
-            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding='valid', align=align)
-            self.conv4 = binarized_modules.BinarizeConv2d(32, 2, kernel_size=1, stride=1, padding='valid')
-            self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding='valid')
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
+            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
+            self.conv4 = binarized_modules.BinarizeConv2d(32, 2, kernel_size=1, stride=1, padding=(0, 0), bias=False)
+            self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
 
         self.softmax1 = torch.nn.Softmax(dim = 1)
-
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=(1, 1))
-
-        self.htanh1 = nn.Hardtanh(inplace=True)
-        self.htanh2 = nn.Hardtanh(inplace=True)
-        self.htanh3 = nn.Hardtanh(inplace=True)
-        self.htanh4 = nn.Hardtanh(inplace=True)
-        self.htanh5 = nn.Hardtanh(inplace=True)
+        self.act = F.relu if self.full else nn.Hardtanh()
         
-        self.exc_count1 = 0
-        self.exc_count2 = 0
-        self.exc_count3 = 0
-        self.total_count = 0
-        
+        self.bn1 = nn.BatchNorm2d(32)
+        self.bn2 = nn.BatchNorm2d(32)
+        self.bn3 = nn.BatchNorm2d(32)
+        self.bn4 = nn.BatchNorm2d(2)
+        self.bn5 = nn.BatchNorm2d(4)
     def forward(self, x):
-        if self.full:
-            x = F.relu(self.conv1(x))
-            pad_width = 0 if x.shape[-1]%2 == 0 else 1
-            self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=(pad_width, pad_width))
-            x = self.pool1(x)
-            x = F.relu(self.conv2(x))
-            x = F.relu(self.conv3(x))
+        pad_width = 0 if x.shape[-1]%2 == 0 else 1
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=(pad_width, pad_width))
 
-            out1 = self.softmax1(self.conv4(x))
-            out2 = self.conv5(x)
-
-        else:
-            #x = F.relu(self.conv1(x))
-            x = self.conv1(x)
-            pad_width = 0 if x.shape[-1]%2 == 0 else 1
-            self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=(pad_width, pad_width))
-            x = self.pool1(x)
-            self.htanh1(x)
-            x = self.conv2(x)
-            self.htanh2(x)
-            x = self.conv3(x)
-            self.htanh3(x)
-            out1 = self.conv4(x)
-            #self.htanh4(out1)
-            out1 = self.softmax1(out1)
-            out2 = self.conv5(x)
-            self.htanh5(out2)
+        x = self.act(self.bn1(self.conv1(x)))
+        x = self.pool1(x)
+        x = self.act(self.bn2(self.conv2(x)))
+        x = self.act(self.bn3(self.conv3(x)))
+        out1 = self.softmax1(self.bn4(self.conv4(x)))
+        out2 = self.bn5(self.conv5(x))
 
         #out1, out2 = out1.type(torch.DoubleTensor), out2.type(torch.DoubleTensor)
         return out1, out2
@@ -96,74 +71,55 @@ class rnet(nn.Module):
         self.binary = binary
 
         if full:
-            self.conv1 = nn.Conv2d(3, 28, kernel_size=3, stride=1, padding='valid')
-            self.conv2 = nn.Conv2d(28, 48, kernel_size=3, stride=1, padding='valid')
-            self.conv3 = nn.Conv2d(48, 64, kernel_size=2, stride=1, padding='valid')
+            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv3 = nn.Conv2d(32, 64, kernel_size=2, stride=1, padding=(0, 0), bias=False)
 
-            self.fc1 = nn.Linear(256, 128)
-            self.fc2 = nn.Linear(128, 2)
-            self.fc3 = nn.Linear(128, 4)
+            self.fc1 = nn.Linear(256, 128, bias=False)
+            self.fc2 = nn.Linear(128, 2, bias=False)
+            self.fc3 = nn.Linear(128, 4, bias=False)
         elif binary:
-            self.conv1 = binarized_modules.BinarizeConv2d(3, 28, kernel_size=3, stride=1, padding='valid')
-            self.conv2 = binarized_modules.BinarizeConv2d(28, 48, kernel_size=3, stride=1, padding='valid')
-            self.conv3 = binarized_modules.BinarizeConv2d(48, 64, kernel_size=2, stride=1, padding='valid')
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv3 = binarized_modules.BinarizeConv2d(32, 64, kernel_size=2, stride=1, padding=(0, 0), bias=False)
 
-            self.fc1 = binarized_modules.BinarizeLinear(256, 128)
-            self.fc2 = binarized_modules.BinarizeLinear(128, 2)
-            self.fc3 = nn.Linear(128, 4)
+            self.fc1 = binarized_modules.BinarizeLinear(256, 128, bias=False)
+            self.fc2 = binarized_modules.BinarizeLinear(128, 2, bias=False)
+            self.fc3 = nn.Linear(128, 4, bias=False)
         else:
-            self.conv1 = binarized_modules.BinarizeConv2d(3, 28, kernel_size=3, stride=1, padding='valid')
-            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 28, 48, kernel_size=3, stride=1, padding='valid', align=align)
-            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 48, 64, kernel_size=2, stride=1, padding='valid', align=align)
-            self.fc1 = binarized_modules.TernarizeLinear(first_sparsity, 256, 128, align=align)
-            self.fc2 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 2, align=align)
-            self.fc3 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 4, align=align)
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
+            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 32, 64, kernel_size=2, stride=1, padding=(0, 0), align=align, bias=False)
+
+            self.fc1 = binarized_modules.TernarizeLinear(first_sparsity, 256, 128, align=align, bias=False)
+            self.fc2 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 2, align=align, bias=False)
+            self.fc3 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 4, align=align, bias=False)
 
         self.softmax1 = torch.nn.Softmax(dim = 1)
 
         self.pool1 = nn.MaxPool2d(kernel_size=3, stride=2, padding=(0, 0)) #TODO: Find the padding for "SAME"
         self.pool2 = nn.MaxPool2d(kernel_size=3, stride=2, padding=(0, 0))
 
-        self.htanh1 = nn.Hardtanh(inplace=True)
-        self.htanh2 = nn.Hardtanh(inplace=True)
-        self.htanh3 = nn.Hardtanh(inplace=True)
-        self.htanh4 = nn.Hardtanh(inplace=True)
-        self.htanh5 = nn.Hardtanh(inplace=True)
-        self.htanh6 = nn.Hardtanh(inplace=True)
+        self.act = F.relu if self.full else nn.Hardtanh()
+
+        self.bn1 = nn.BatchNorm2d(32)
+        self.bn2 = nn.BatchNorm2d(32)
+        self.bn3 = nn.BatchNorm2d(64)
+        self.bn4 = nn.BatchNorm1d(128)
+        self.bn5 = nn.BatchNorm1d(2)
+        self.bn6 = nn.BatchNorm1d(4)
+
         
     def forward(self, x):
-        if self.full:
-            x = F.relu(self.conv1(x))
-            x = self.pool1(x)
-            x = F.relu(self.conv2(x))
-            x = self.pool2(x)
-            x = F.relu(self.conv3(x))
-            x = torch.flatten(x, start_dim=1)
-
-            x = F.relu(self.fc1(x))
-            
-            out1 = self.softmax1(self.fc2(x))
-            out2 = self.fc3(x)
-        else:
-            x = self.conv1(x)
-            x = self.pool1(x)
-            self.htanh1(x)
-            x = self.conv2(x)
-            x = self.pool2(x)
-            self.htanh2(x)
-            x = self.conv3(x)
-            self.htanh3(x)
-            x = torch.flatten(x, start_dim=1)
-
-            x = self.fc1(x)
-            self.htanh4(x)
-
-            out1 = self.fc2(x)
-            #self.htanh5(x)
-            out1 = self.softmax1(out1)
-            
-            out2 = self.fc3(x)
-            self.htanh6(out2)
+        x = self.act(self.bn1(self.conv1(x)))
+        x = self.pool1(x)
+        x = self.act(self.bn2(self.conv2(x)))
+        x = self.pool2(x)
+        x = self.act(self.bn3(self.conv3(x)))
+        x = torch.flatten(x, start_dim=1)
+        x = self.act(self.bn4(self.fc1(x)))
+        out1 = self.softmax1(self.bn5(self.fc2(x)))
+        out2 = self.bn6(self.fc3(x))
 
         return out1, out2
 
@@ -177,41 +133,32 @@ class onet(nn.Module):
         self.binary = binary
 
         if full:
-            """
-            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding='valid')
-            self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding='valid')
-            self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding='valid')
-            self.conv4 = nn.Conv2d(64, 128, kernel_size=2, stride=1, padding='valid')
-            """
+            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=(0, 0), bias=False)
+            self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv3 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
 
-            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=2, padding='valid')
-            self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding='valid')
-            self.conv3 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding='valid')
-            #self.conv4 = nn.Conv2d(32, 128, kernel_size=2, stride=1, padding='valid')
-
-            self.fc1 = nn.Linear(128, 128)
-            self.fc2 = nn.Linear(128, 2)
-            self.fc3 = nn.Linear(128, 4)
-            self.fc4 = nn.Linear(128, 10)
+            self.fc1 = nn.Linear(128, 128, bias=False)
+            self.fc2 = nn.Linear(128, 2, bias=False)
+            self.fc3 = nn.Linear(128, 4, bias=False)
+            self.fc4 = nn.Linear(128, 10, bias=False)
         elif binary:
-            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding='valid')
-            self.conv2 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding='valid')
-            self.conv3 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding='valid')
-            #self.conv4 = binarized_modules.BinarizeConv2d(32, 128, kernel_size=2, stride=1, padding='valid')
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv3 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
 
-            self.fc1 = binarized_modules.BinarizeLinear(2048, 128)
-            self.fc2 = binarized_modules.BinarizeLinear(128, 2)
-            self.fc3 = nn.Linear(128, 4)
-            self.fc4 = nn.Linear(128, 10)
+            self.fc1 = binarized_modules.BinarizeLinear(2048, 128, bias=False)
+            self.fc2 = binarized_modules.BinarizeLinear(128, 2, bias=False)
+            self.fc3 = nn.Linear(128, 4, bias=False)
+            self.fc4 = nn.Linear(128, 10, bias=False)
         else:
-            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding='valid')
-            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding='valid', align=align)
-            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding='valid', align=align)
-            #self.conv4 = binarized_modules.TernarizeConv2d(conv_thres, 32, 128, kernel_size=2, stride=1, padding='valid', align=align)
-            self.fc1 = binarized_modules.TernarizeLinear(first_sparsity, 2048, 128, align=align)
-            self.fc2 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 2, align=align)
-            self.fc3 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 4, align=align)
-            self.fc4 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 10, align=align)
+            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
+            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
+
+            self.fc1 = binarized_modules.TernarizeLinear(first_sparsity, 2048, 128, align=align, bias=False)
+            self.fc2 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 2, align=align, bias=False)
+            self.fc3 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 4, align=align, bias=False)
+            self.fc4 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 10, align=align, bias=False)
 
         self.softmax1 = torch.nn.Softmax(dim = 1)
 
@@ -219,53 +166,29 @@ class onet(nn.Module):
         self.pool2 = nn.MaxPool2d(kernel_size=3, stride=2, padding=(0, 0))
         self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2, padding=(0, 0))
 
-        self.htanh1 = nn.Hardtanh(inplace=True)
-        self.htanh2 = nn.Hardtanh(inplace=True)
-        self.htanh3 = nn.Hardtanh(inplace=True)
-        self.htanh4 = nn.Hardtanh(inplace=True)
-        self.htanh5 = nn.Hardtanh(inplace=True)
-        self.htanh6 = nn.Hardtanh(inplace=True)
-        self.htanh7 = nn.Hardtanh(inplace=True)
+        self.act = F.relu if self.full else nn.Hardtanh()
+
+        self.bn1 = nn.BatchNorm2d(32)
+        self.bn2 = nn.BatchNorm2d(32)
+        self.bn3 = nn.BatchNorm2d(32)
+        self.bn4 = nn.BatchNorm1d(128)
+        self.bn5 = nn.BatchNorm1d(2)
+        self.bn6 = nn.BatchNorm1d(4)
+        self.bn7 = nn.BatchNorm1d(10)
+
         
     def forward(self, x):
-        if self.full:
-            x = F.relu(self.conv1(x))
-            x = self.pool1(x)
-            x = F.relu(self.conv2(x))
-            x = self.pool2(x)
-            x = F.relu(self.conv3(x))
-            #x = self.pool3(x)
-            #x = F.relu(self.conv4(x))
-            x = torch.flatten(x, start_dim=1)
-            x = F.relu(self.fc1(x))
-            
-            out1 = self.softmax1(self.fc2(x))
-            out2 = self.fc3(x)
-            out3 = self.fc4(x)
-        else:
-
-            x = self.conv1(x)
-            x = self.pool1(x)
-            self.htanh1(x)
-            x = self.conv2(x)
-            x = self.pool2(x)
-            self.htanh2(x)
-            x = self.conv3(x)
-            #x = self.pool3(x)
-            self.htanh3(x)
-            #x = self.conv4(x)
-            #self.htanh4(x)
-            x = torch.flatten(x, start_dim=1)
-            #print('DEBUG', x.shape)
-            x = F.relu(self.fc1(x))
-            
-            out1 = self.fc2(x)
-            #self.htanh5(out1)
-            out1 = self.softmax1(out1)
-            out2 = self.fc3(x)
-            self.htanh6(out2)
-            out3 = self.fc4(x)
-            self.htanh7(out3)
+        x = self.act(self.bn1(self.conv1(x)))
+        x = self.pool1(x)
+        x = self.act(self.bn2(self.conv2(x)))
+        x = self.pool2(x)
+        x = self.act(self.bn3(self.conv3(x)))
+        x = torch.flatten(x, start_dim=1)
+        x = self.act(self.bn4(self.fc1(x)))
+        
+        out1 = self.softmax1(self.bn5(self.fc2(x)))
+        out2 = self.bn6(self.fc3(x))
+        out3 = self.bn7(self.fc4(x))
 
         return out1, out2, out3
 

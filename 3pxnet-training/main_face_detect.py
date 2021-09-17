@@ -11,11 +11,15 @@ import network
 import utils_own
 from face_detection_dataset import MTCNNTrainDataset
 from network import pnet, rnet, onet
+import esp_dl_utils
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 torch.manual_seed(0)
 np.random.seed(0)
+
+EPOCHS = 1 # 25
+EPOCHS_2 = 1 # 200
 
 def calcAccuracy(pred_score, actual_score):
   #acc = torch.mean((torch.argmax(pred_score, dim=1) == actual_score).type(torch.FloatTensor))
@@ -25,6 +29,47 @@ def calcAccuracy(pred_score, actual_score):
   f1 = f1_score(true, pred)
   return acc, f1
 
+def get_dataset():
+  suffix = "_small"
+
+  root = os.path.join(os.getcwd(), "data", "revisedDataset")
+  box_dataset = np.load(os.path.join(root, 'box_dataset' + suffix + '.npz'))
+  negative_dataset = np.load(os.path.join(root, 'negative_dataset' + suffix + '.npz'))
+  landmark_dataset = np.load(os.path.join(root, 'landmark_dataset' + suffix + '.npz'))
+
+  print("Reading box dataset")
+  box_images = box_dataset['images']
+  box_boxes = box_dataset['boxes']
+  print("Finished reading box dataset")
+  print("Reading negative dataset")
+  negative_images = negative_dataset['images']
+  print("Finished reading negative dataset")
+  print("Reading landmark dataset")
+  landmark_images = landmark_dataset['images']
+  landmark_landmarks = landmark_dataset['landmarks']
+  print("Finished reading landmark dataset")
+
+  data = {
+    "box_images": box_images,
+    "box_boxes": box_boxes,
+    "negative_images": negative_images,
+    "landmark_images": landmark_images,
+    "landmark_landmarks": landmark_landmarks
+  }
+
+  choices = {
+      0: "boxes",
+      1: "landmarks",
+      2: "negative"
+  }
+
+  batch=32
+  trainloader = MTCNNTrainDataset(root, data, batch_size=batch, train=True)
+  testloader = MTCNNTrainDataset(root, data, batch_size=batch, train=False)
+
+
+  return trainloader, testloader
+ 
 def forward(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch=0, training=True, optimizer=None, verbal=False, keras=False):
   if keras:
     assert not training, "keras option not compatible with training mode"
@@ -46,7 +91,8 @@ def forward(data_loader, model, modelName, score_criterion, box_landmark_criteri
   if training:
     print()
   for choice, image, (box, landmark, score) in data_loader_iter:
-      if training and batch % 100 == 0:
+      """
+      if training and verbal and batch % 100 == 0:
         message = '\rEpoch: [{0}]\t'.format(epoch)
         message += 'Batch {0}/{1}\t'.format(batch, batches_total)
         message += 'Training score acc {score_acc.avg:.4f}\t'.format(score_acc=score_accs)
@@ -56,6 +102,7 @@ def forward(data_loader, model, modelName, score_criterion, box_landmark_criteri
         if modelName == 'onet':
           message += 'Training landmark loss {landmark_loss.avg:.4f}\t'.format(landmark_loss=landmark_losses)
         print(message, end='')
+      """
 
       input_var = Variable(image)
       score_var = Variable(score)
@@ -120,6 +167,7 @@ def forward(data_loader, model, modelName, score_criterion, box_landmark_criteri
       
   return score_losses.avg, box_losses.avg
 
+
 def train(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer, verbal=True):
    # switch to train mode
    model.train()
@@ -130,109 +178,264 @@ def validate(data_loader, model, modelName, score_criterion, box_landmark_criter
    model.eval()
    return forward(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch, training=False, optimizer=None, verbal=verbal)
 
-suffix = "_small"
+def train_all(models):
+  learning_rate = 1e-4
+  score_criterion = nn.BCEWithLogitsLoss()
+  box_landmark_criterion = nn.MSELoss()
+  lr_decay = np.power((2e-6/learning_rate), (1./100))
+  pack=32
 
-root = os.path.join(os.getcwd(), "training_data", "revisedDataset")
-box_dataset = np.load(os.path.join(root, 'box_dataset' + suffix + '.npz'))
-negative_dataset = np.load(os.path.join(root, 'negative_dataset' + suffix + '.npz'))
-landmark_dataset = np.load(os.path.join(root, 'landmark_dataset' + suffix + '.npz'))
-
-print("Reading box dataset")
-box_images = box_dataset['images']
-box_boxes = box_dataset['boxes']
-print("Finished reading box dataset")
-print("Reading negative dataset")
-negative_images = negative_dataset['images']
-print("Finished reading negative dataset")
-print("Reading landmark dataset")
-landmark_images = landmark_dataset['images']
-landmark_landmarks = landmark_dataset['landmarks']
-print("Finished reading landmark dataset")
-
-data = {
-  "box_images": box_images,
-  "box_boxes": box_boxes,
-  "negative_images": negative_images,
-  "landmark_images": landmark_images,
-  "landmark_landmarks": landmark_landmarks
-}
-
-choices = {
-    0: "boxes",
-    1: "landmarks",
-    2: "negative"
-}
-
-batch=32
-
-learning_rate = 1e-4
-score_criterion = nn.BCEWithLogitsLoss()
-box_landmark_criterion = nn.MSELoss()
-lr_decay = np.power((2e-6/learning_rate), (1./100))
-
-trainloader = MTCNNTrainDataset(root, data, batch_size=batch, train=True)
-testloader = MTCNNTrainDataset(root, data, batch_size=batch, train=False)
-
-full = True
-binary = True
-sparsity = 0.1
-
-pnet_model = pnet(full=full, binary=binary, conv_thres=sparsity).to(device)
-rnet_model = rnet(full=full, binary=binary, first_sparsity=sparsity, rest_sparsity=sparsity, conv_thres=sparsity).to(device)
-onet_model = onet(full=full, binary=binary, first_sparsity=sparsity, rest_sparsity=sparsity, conv_thres=sparsity).to(device)
-
-models = [("pnet", pnet_model), ("rnet", rnet_model), ("onet", onet_model)]
-
-for (modelName, model) in models:
-  print("Begin training", modelName, end='')
-  if model.full:
-    extension = "_full"
-  else:
-    if model.binary:
-      extension = "_binary"
+  for (modelName, model) in models:
+    print("Begin training", modelName, end='')
+    if model.full:
+      extension = "_full"
     else:
-      extension = "_ternary"
-  save_file = modelName + "_model" + extension + ".pt"
+      if model.binary:
+        extension = "_binary"
+      else:
+        extension = "_ternary"
+    save_file = modelName + "_model" + extension + ".pt"
 
-  optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-  scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
 
-  EPOCHS = 50
-  for epoch in range(0, EPOCHS):
-    train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer, verbal=True)
-    val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
-    scheduler.step()
+    utils_own.adjust_pack(model, 1)
+    for epoch in range(0, EPOCHS):
+      train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer, verbal=True)
+      val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
+      scheduler.step()
 
-  torch.save(model, save_file)
+    torch.save(model, save_file)
 
-  utils_own.adjust_pack(net, 1)
-  utils_own.permute_all_weights_once(net, pack=pack, mode=-1)
+    utils_own.adjust_pack(model, pack)
+    utils_own.permute_all_weights_once(model, pack=pack, mode=-1)
 
-  optimizer = optim.Adam(net.parameters(), lr=learning_rate)
-  scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
 
-  for epoch in range(0, EPOCHS):
-    train_score_loss, train_box_loss = train(trainloader, net, score_criterion, box_landmark_criterion, epoch, optimizer)
-    val_score_loss, val_box_loss = validate(testloader, net, score_criterion, box_landmark_criterion, epoch, verbal=True)
-    scheduler.step()
+    for epoch in range(0, EPOCHS):
+      train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer)
+      val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
+      scheduler.step()
 
-  # Fix pruned packs and fine tune
-  for mod in net.modules():
-    if hasattr(mod, 'mask'):
-       mod.mask = torch.abs(mod.weight.data)
-  net.pruned = True
+    # Fix pruned packs and fine tune
+    for mod in model.modules():
+      if hasattr(mod, 'mask'):
+         mod.mask = torch.abs(mod.weight.data)
+    model.pruned = True
 
-  optimizer = optim.Adam(net.parameters(), lr=learning_rate)
-  scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
-  lowest_loss = 100 #starting value
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
+    lowest_loss = 100 #starting value
 
-  for epoch in range(0, EPOCHS):
-    train_score_loss, train_box_loss = train(trainloader, net, score_criterion, box_landmark_criterion, epoch, optimizer)
-    val_score_loss, val_box_loss = validate(testloader, net, score_criterion, box_landmark_criterion, epoch, verbal=True)
+    for epoch in range(0, EPOCHS_2):
+      train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer)
+      val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
 
-    # remember best loss and save checkpoint
-    is_best = val_score_loss + val_box_loss < lowest_loss
-    if is_best:
-       lowest_loss = val_score_loss + val_box_loss
-       torch.save(net, save_file)
-    scheduler.step()
+      # remember best loss and save checkpoint
+      is_best = val_score_loss + val_box_loss < lowest_loss
+      if is_best:
+         lowest_loss = val_score_loss + val_box_loss
+         torch.save(model, save_file)
+      scheduler.step()
+
+def write_esp_dl_headers(pnet_model, rnet_model, onet_model):
+    weight = {
+      "pnet_conv2d_kernel1": {
+          "type": "conv_kernel",
+          "value": list(pnet_model.conv1.parameters())[0]
+      },
+      "pnet_conv2d_bias1": {
+          "type": "conv_bias",
+          "value": torch.zeros(int(list(pnet_model.conv1.parameters())[0].shape[0]))
+      },
+      "pnet_conv2d_kernel2": {
+          "type": "conv_kernel",
+          "value": list(pnet_model.conv2.parameters())[0]
+      },
+      "pnet_conv2d_bias2": {
+          "type": "conv_bias",
+          "value": torch.zeros(int(list(pnet_model.conv2.parameters())[0].shape[0]))
+      },
+      "pnet_conv2d_kernel3": {
+          "type": "conv_kernel",
+          "value": list(pnet_model.conv3.parameters())[0]
+      },
+      "pnet_conv2d_bias3": {
+          "type": "conv_bias",
+          "value": torch.zeros(int(list(pnet_model.conv3.parameters())[0].shape[0]))
+      },
+      "pnet_conv2d_kernel4": {
+          "type": "conv_kernel",
+          "value": list(pnet_model.conv4.parameters())[0]
+      },
+      "pnet_conv2d_bias4": {
+          "type": "conv_bias",
+          "value": torch.zeros(int(list(pnet_model.conv4.parameters())[0].shape[0]))
+      },
+      "pnet_conv2d_kernel5": {
+          "type": "conv_kernel",
+          "value": list(pnet_model.conv5.parameters())[0]
+      },
+      "pnet_conv2d_bias5": {
+          "type": "conv_bias",
+          "value": torch.zeros(int(list(pnet_model.conv5.parameters())[0].shape[0]))
+      },
+      "rnet_conv2d_kernel1": {
+          "type": "conv_kernel",
+          "value": list(rnet_model.conv1.parameters())[0]
+      },
+      "rnet_conv2d_bias1": {
+          "type": "conv_bias",
+          "value": torch.zeros(int(list(rnet_model.conv1.parameters())[0].shape[0]))
+      },
+      "rnet_conv2d_kernel2": {
+          "type": "conv_kernel",
+          "value": list(rnet_model.conv2.parameters())[0]
+      },
+      "rnet_conv2d_bias2": {
+          "type": "conv_bias",
+          "value": torch.zeros(int(list(rnet_model.conv2.parameters())[0].shape[0]))
+      },
+      "rnet_conv2d_kernel3": {
+          "type": "conv_kernel",
+          "value": list(rnet_model.conv3.parameters())[0]
+      },
+      "rnet_conv2d_bias3": {
+          "type": "conv_bias",
+          "value": torch.zeros(int(list(rnet_model.conv3.parameters())[0].shape[0]))
+      },
+      "rnet_dense_kernel1": {
+          "type": "dense_kernel",
+          "value": list(rnet_model.fc1.parameters())[0]
+      },
+      "rnet_dense_kernel2": {
+          "type": "dense_kernel",
+          "value": list(rnet_model.fc2.parameters())[0]
+      },
+      "rnet_dense_kernel3": {
+          "type": "dense_kernel",
+          "value": list(rnet_model.fc3.parameters())[0]
+      },
+      "onet_conv2d_kernel1": {
+          "type": "conv_kernel",
+          "value": list(onet_model.conv1.parameters())[0]
+      },
+      "onet_conv2d_bias1": {
+          "type": "conv_bias",
+          "value": torch.zeros(int(list(onet_model.conv1.parameters())[0].shape[0]))
+      },
+      "onet_conv2d_kernel2": {
+          "type": "conv_kernel",
+          "value": list(onet_model.conv2.parameters())[0]
+      },
+      "onet_conv2d_bias2": {
+          "type": "conv_bias",
+          "value": torch.zeros(int(list(onet_model.conv2.parameters())[0].shape[0]))
+      },
+      "onet_conv2d_kernel3": {
+          "type": "conv_kernel",
+          "value": list(onet_model.conv3.parameters())[0]
+      },
+      "onet_conv2d_bias3": {
+          "type": "conv_bias",
+          "value": torch.zeros(int(list(onet_model.conv3.parameters())[0].shape[0]))
+      },
+      "onet_dense_kernel1": {
+          "type": "dense_kernel",
+          "value": list(onet_model.fc1.parameters())[0]
+      },
+      "onet_dense_kernel2": {
+          "type": "dense_kernel",
+          "value": list(onet_model.fc2.parameters())[0]
+      },
+      "onet_dense_kernel3": {
+          "type": "dense_kernel",
+          "value": list(onet_model.fc3.parameters())[0]
+      },
+      "onet_dense_kernel4": {
+          "type": "dense_kernel",
+          "value": list(onet_model.fc4.parameters())[0]
+      },
+    }
+
+    esp_dl_utils.writeFullPrecWeights(weight)
+    esp_dl_utils.writeQuantizedWeights(weight)
+
+def save_onnx(models):
+    for (modelName, model) in models:
+      if model.full:
+        suffix = "_full"
+      elif model.binary:
+        suffix = "_binary"
+      else:
+        suffix = "_ternarized"
+        if model.conv_thres < 0.3:
+          suffix += "_low"
+        elif model.conv_thres < 0.7:
+          suffix += "_medium"
+        else:
+          suffix += "_high"
+
+      if "pnet" in modelName:
+        dim = 12
+      elif "rnet" in modelName:
+        dim = 24
+      elif "onet" in modelName:
+        dim = 48
+      else: #error
+        dim = -1
+
+      model.eval()
+      onnxFilename = "training_data/" + modelName + suffix + ".onnx"
+      size = (1, 3, dim, dim)
+      x=Variable(torch.randn(size,requires_grad=True).to(device))
+      #for binarized/ternarized networks, model.forward is necessary for weights to be appropriately binarized and sparsified
+      with torch.no_grad():
+        torch_pred = [out.cpu().detach().numpy().flatten() for out in model.forward(x)]
+        print(modelName, "torch prediction", [out[:10] for out in torch_pred])
+      torch.onnx.export(model,x,onnxFilename,opset_version=9,input_names = ['input'], output_names = ['output'])
+
+if __name__ == "__main__":
+  sparsity_low = 0.1
+  sparsity_medium = 0.5
+  sparsity_high = 0.9
+
+  pnet_model_full = pnet(full=True).to(device)
+  rnet_model_full = rnet(full=True).to(device)
+  onet_model_full = onet(full=True).to(device)
+  pnet_model_binarized = pnet(full=False, binary=True).to(device)
+  rnet_model_binarized = rnet(full=False, binary=True).to(device)
+  onet_model_binarized = onet(full=False, binary=True).to(device)
+  pnet_model_ternarized_low = pnet(full=False, binary=False, conv_thres=sparsity_low).to(device)
+  rnet_model_ternarized_low = rnet(full=False, binary=False, first_sparsity=sparsity_low, rest_sparsity=sparsity_low, conv_thres=sparsity_low).to(device)
+  onet_model_ternarized_low = onet(full=False, binary=False, first_sparsity=sparsity_low, rest_sparsity=sparsity_low, conv_thres=sparsity_low).to(device)
+  pnet_model_ternarized_medium = pnet(full=False, binary=False, conv_thres=sparsity_medium).to(device)
+  rnet_model_ternarized_medium = rnet(full=False, binary=False, first_sparsity=sparsity_medium, rest_sparsity=sparsity_medium, conv_thres=sparsity_medium).to(device)
+  onet_model_ternarized_medium = onet(full=False, binary=False, first_sparsity=sparsity_medium, rest_sparsity=sparsity_medium, conv_thres=sparsity_medium).to(device)
+  pnet_model_ternarized_high = pnet(full=False, binary=False, conv_thres=sparsity_high).to(device)
+  rnet_model_ternarized_high = rnet(full=False, binary=False, first_sparsity=sparsity_high, rest_sparsity=sparsity_high, conv_thres=sparsity_high).to(device)
+  onet_model_ternarized_high = onet(full=False, binary=False, first_sparsity=sparsity_high, rest_sparsity=sparsity_high, conv_thres=sparsity_high).to(device)
+
+  full_models = [("pnet", pnet_model_full), ("rnet", rnet_model_full), ("onet", onet_model_full)]
+  binarized_models = [("pnet", pnet_model_binarized), ("rnet", rnet_model_binarized), ("onet", onet_model_binarized)]
+  ternarized_low_models = [("pnet", pnet_model_ternarized_low), ("rnet", rnet_model_ternarized_low), ("onet", onet_model_ternarized_low)]
+  ternarized_medium_models = [("pnet", pnet_model_ternarized_medium), ("rnet", rnet_model_ternarized_medium), ("onet", onet_model_ternarized_medium)]
+  ternarized_high_models = [("pnet", pnet_model_ternarized_high), ("rnet", rnet_model_ternarized_high), ("onet", onet_model_ternarized_high)]
+
+  models = full_models + binarized_models + ternarized_low_models + ternarized_medium_models + ternarized_high_models
+  #models = full_models
+
+  trainloader, testloader = get_dataset()
+  #train_all(models)
+  #write_esp_dl_headers(models[0][1], models[1][1], models[2][1])
+  #save_onnx(models)
+
+  train_all(binarized_models)
+  save_onnx(binarized_models)
+  train_all(ternarized_low_models)
+  save_onnx(ternarized_low_models)
+  train_all(ternarized_medium_models)
+  save_onnx(ternarized_medium_models)
+  train_all(ternarized_high_models)
+  save_onnx(ternarized_high_models)

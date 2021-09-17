@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 """
 esp-dl represents quantized weights as a matrix of uint8 values * 2^exponent
@@ -47,7 +48,7 @@ def writeFullPrecWeights(weights, outputFileName="model.h"):
   all_code = ""
   all_code += "#pragma once\n"
   all_code += "#include \"dl_lib_matrix3d.h\"\n\n"
-  all_code += "dl_matrix3d_t* model_forward(dl_matrix3d_t *input);\n\n"
+  #all_code += "dl_matrix3d_t* model_forward(dl_matrix3d_t *input);\n\n"
 
   # data ordering should be NWHC for conv, NHWC for dense
   for (weight_name, weight_value) in weights.items():
@@ -112,7 +113,7 @@ def writeQuantizedWeights(weights, outputFileName="model_qu.h"):
   all_code = ""
   all_code += "#pragma once\n"
   all_code += "#include \"dl_lib_matrix3dq.h\"\n\n"
-  all_code += "dl_matrix3d_t* model_forward(dl_matrix3du_t *input);\n\n"
+  #all_code += "dl_matrix3d_t* model_forward(dl_matrix3du_t *input);\n\n"
 
   # data ordering should be NWHC for conv, NHWC for dense
   for (weight_name, weight_value) in weights.items():
@@ -145,8 +146,6 @@ def writeQuantizedWeights(weights, outputFileName="model_qu.h"):
     
     e, matrix_data_flat = getQuantizedWeight(matrix_data_flat_float)
     matrix_data_flat = matrix_data_flat.numpy().tolist()
-    print(matrix_data_flat[:10])
-    print(matrix_data_flat_float[:10])
 
     matrix_data_code = "const static qtp_t " + weight_name + "_item_array[] = {\n"
     for i in range(0, len(matrix_data_flat), 8):
