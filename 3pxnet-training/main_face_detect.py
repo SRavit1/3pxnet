@@ -7,8 +7,8 @@ from sklearn.metrics import accuracy_score, f1_score
 import os
 
 from utils import *
-import network
 import utils_own
+import network
 from face_detection_dataset import MTCNNTrainDataset
 from network import pnet, rnet, onet
 import esp_dl_utils
@@ -178,7 +178,7 @@ def validate(data_loader, model, modelName, score_criterion, box_landmark_criter
    model.eval()
    return forward(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch, training=False, optimizer=None, verbal=verbal)
 
-def train_all(models):
+def train_all(models, trainloader, testloader):
   learning_rate = 1e-4
   score_criterion = nn.BCEWithLogitsLoss()
   box_landmark_criterion = nn.MSELoss()
@@ -341,6 +341,14 @@ def write_esp_dl_headers(pnet_model, rnet_model, onet_model):
           "type": "conv_bias",
           "value": torch.zeros(int(list(onet_model.conv3.parameters())[0].shape[0]))
       },
+      "onet_conv2d_kernel4": {
+          "type": "conv_kernel",
+          "value": list(onet_model.conv4.parameters())[0]
+      },
+      "onet_conv2d_bias4": {
+          "type": "conv_bias",
+          "value": torch.zeros(int(list(onet_model.conv4.parameters())[0].shape[0]))
+      },
       "onet_dense_kernel1": {
           "type": "dense_kernel",
           "value": list(onet_model.fc1.parameters())[0]
@@ -367,7 +375,7 @@ def save_onnx(models):
       if model.full:
         suffix = "_full"
       elif model.binary:
-        suffix = "_binary"
+        suffix = "_binarized"
       else:
         suffix = "_ternarized"
         if model.conv_thres < 0.3:
@@ -424,18 +432,11 @@ if __name__ == "__main__":
   ternarized_high_models = [("pnet", pnet_model_ternarized_high), ("rnet", rnet_model_ternarized_high), ("onet", onet_model_ternarized_high)]
 
   models = full_models + binarized_models + ternarized_low_models + ternarized_medium_models + ternarized_high_models
-  #models = full_models
+  models = [binarized_models[2]]
 
-  trainloader, testloader = get_dataset()
-  #train_all(models)
-  #write_esp_dl_headers(models[0][1], models[1][1], models[2][1])
-  #save_onnx(models)
-
-  train_all(binarized_models)
-  save_onnx(binarized_models)
-  train_all(ternarized_low_models)
-  save_onnx(ternarized_low_models)
-  train_all(ternarized_medium_models)
-  save_onnx(ternarized_medium_models)
-  train_all(ternarized_high_models)
-  save_onnx(ternarized_high_models)
+  #trainloader, testloader = get_dataset()
+  #for models in [binarized_models, ternarized_low_models, ternarized_medium_models, ternarized_high_models]:
+  #for models in [models]:
+    #train_all(models, trainloader, testloader)
+    #save_onnx(models)
+  write_esp_dl_headers(full_models[0][1], full_models[1][1], full_models[2][1])
