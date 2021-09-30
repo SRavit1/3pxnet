@@ -3,10 +3,10 @@ from torch import nn
 import torch.optim as optim
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
+import math
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 import os
-import math
 
 from utils import *
 import utils_own
@@ -20,8 +20,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.manual_seed(0)
 np.random.seed(0)
 
-EPOCHS = 25 # 25E
-EPOCHS_2 = 200 # 200
+EPOCHS = 1 # 25
+EPOCHS_2 = 2 # 200
 
 def calcAccuracy(pred_score, actual_score):
   #acc = torch.mean((torch.argmax(pred_score, dim=1) == actual_score).type(torch.FloatTensor))
@@ -66,17 +66,13 @@ def get_dataset():
   }
 
   batch=32
-
-  pnet_trainloader = MTCNNTrainDataset(root, data, batch_size=batch, train=True, model='pnet')
-  pnet_testloader = MTCNNTrainDataset(root, data, batch_size=batch, train=False, model='pnet')
-  rnet_trainloader = MTCNNTrainDataset(root, data, batch_size=batch, train=True, model='rnet')
-  rnet_testloader = MTCNNTrainDataset(root, data, batch_size=batch, train=False, model='rnet')
-  onet_trainloader = MTCNNTrainDataset(root, data, batch_size=batch, train=True, model='onet')
-  onet_testloader = MTCNNTrainDataset(root, data, batch_size=batch, train=False, model='onet')
+  trainloader = MTCNNTrainDataset(root, data, batch_size=batch, train=True)
+  testloader = MTCNNTrainDataset(root, data, batch_size=batch, train=False)
 
 
-  return pnet_trainloader, pnet_testloader, rnet_trainloader, rnet_testloader, onet_trainloader, onet_testloader
+  return trainloader, testloader
  
+
 def forward(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch=0, training=True, optimizer=None, verbal=False, keras=False):
   if keras:
     assert not training, "keras option not compatible with training mode"
@@ -97,7 +93,7 @@ def forward(data_loader, model, modelName, score_criterion, box_landmark_criteri
   dataset_loader = DataLoader(data_loader, batch_size=BS, shuffle=True)
   batch = 0
   batches_total = math.ceil(float(len(data_loader)) / BS)
-  if epoch%10==9 and training:
+  if training:
     print()
   #for choice, image, (box, landmark, score) in data_loader_iter:
   for image, score in dataset_loader:
@@ -163,7 +159,7 @@ def forward(data_loader, model, modelName, score_criterion, box_landmark_criteri
                p.weight_org.copy_(p.weight.data.clamp_(-1,1))
       batch += 1
 
-  if epoch%10==9 and verbal:
+  if verbal:
     if training:
       print('\r', end='')
     prefix = 'Training ' if training else 'Validation '
@@ -181,7 +177,6 @@ def forward(data_loader, model, modelName, score_criterion, box_landmark_criteri
       
   return score_losses.avg, box_losses.avg
 
-
 def train(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer, verbal=True):
    # switch to train mode
    model.train()
@@ -192,8 +187,7 @@ def validate(data_loader, model, modelName, score_criterion, box_landmark_criter
    model.eval()
    return forward(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch, training=False, optimizer=None, verbal=verbal)
 
-def train_all(models):
-  pnet_trainloader, pnet_testloader, rnet_trainloader, rnet_testloader, onet_trainloader, onet_testloader = get_dataset()
+def train_all(models, trainloader, testloader):
   learning_rate = 1e-4
   score_criterion = nn.BCEWithLogitsLoss()
   box_landmark_criterion = nn.MSELoss()
@@ -212,23 +206,15 @@ def train_all(models):
     extension += "_bw" + str(model.bitwidth)
     save_file = modelName + "_model" + extension + "_" + model.id + ".pt"
 
-    if modelName == "pnet":
-      trainloader, testloader = pnet_trainloader, pnet_testloader
-    elif modelName == "rnet":
-      trainloader, testloader = rnet_trainloader, rnet_testloader
-    elif modelName == "onet":
-      trainloader, testloader = onet_trainloader, onet_testloader
-
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
 
     utils_own.adjust_pack(model, 1)
     for epoch in range(0, EPOCHS):
-      train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer, verbal=True)
+      #train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer, verbal=True)
       val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
       scheduler.step()
 
-    torch.save(model, save_file)
 
     utils_own.adjust_pack(model, pack)
     utils_own.permute_all_weights_once(model, pack=pack, mode=-1)
@@ -237,7 +223,7 @@ def train_all(models):
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
 
     for epoch in range(0, EPOCHS):
-      train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer)
+      #train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer)
       val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
       scheduler.step()
 
@@ -252,7 +238,7 @@ def train_all(models):
     lowest_loss = 100 #starting value
 
     for epoch in range(0, EPOCHS_2):
-      train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer)
+      #train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer)
       val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
 
       # remember best loss and save checkpoint
@@ -429,69 +415,21 @@ def save_onnx(models):
       torch.onnx.export(model,x,onnxFilename,opset_version=9,input_names = ['input'], output_names = ['output'])
 
 if __name__ == "__main__":
-  sparsity_low = 0.1
-  sparsity_medium = 0.5
-  sparsity_high = 0.9
+  onet_model_full = torch.load("onet_model_full_88ac95db.pt")
+  onet_model_binary = torch.load("onet_model_binary_14b9882c.pt")
+  onet_model_ternary_low = torch.load("onet_model_ternary_3b35eb42.pt")
+  onet_model_ternary_medium = torch.load("onet_model_ternary_875f02f0.pt")
+  onet_model_ternary_high = torch.load("onet_model_ternary_b1d52762.pt")
 
-  pnet_model_full = pnet(full=True).to(device)
-  rnet_model_full = rnet(full=True).to(device)
-  onet_model_full = onet(full=True).to(device)
-  pnet_model_binarized = pnet(full=False, binary=True).to(device)
-  rnet_model_binarized = rnet(full=False, binary=True).to(device)
-  onet_model_binarized = onet(full=False, binary=True).to(device)
-  pnet_model_2bit = pnet(full=False, binary=True, bitwidth=2).to(device)
-  rnet_model_2bit = rnet(full=False, binary=True, bitwidth=2).to(device)
-  onet_model_2bit = onet(full=False, binary=True, bitwidth=2).to(device)
-  pnet_model_4bit = pnet(full=False, binary=True, bitwidth=4).to(device)
-  rnet_model_4bit = rnet(full=False, binary=True, bitwidth=4).to(device)
-  onet_model_4bit = onet(full=False, binary=True, bitwidth=4).to(device)
-  pnet_model_ternarized_low = pnet(full=False, binary=False, conv_thres=sparsity_low).to(device)
-  rnet_model_ternarized_low = rnet(full=False, binary=False, first_sparsity=sparsity_low, rest_sparsity=sparsity_low, conv_thres=sparsity_low).to(device)
-  onet_model_ternarized_low = onet(full=False, binary=False, first_sparsity=sparsity_low, rest_sparsity=sparsity_low, conv_thres=sparsity_low).to(device)
-  pnet_model_ternarized_medium = pnet(full=False, binary=False, conv_thres=sparsity_medium).to(device)
-  rnet_model_ternarized_medium = rnet(full=False, binary=False, first_sparsity=sparsity_medium, rest_sparsity=sparsity_medium, conv_thres=sparsity_medium).to(device)
-  onet_model_ternarized_medium = onet(full=False, binary=False, first_sparsity=sparsity_medium, rest_sparsity=sparsity_medium, conv_thres=sparsity_medium).to(device)
-  pnet_model_ternarized_high = pnet(full=False, binary=False, conv_thres=sparsity_high).to(device)
-  rnet_model_ternarized_high = rnet(full=False, binary=False, first_sparsity=sparsity_high, rest_sparsity=sparsity_high, conv_thres=sparsity_high).to(device)
-  onet_model_ternarized_high = onet(full=False, binary=False, first_sparsity=sparsity_high, rest_sparsity=sparsity_high, conv_thres=sparsity_high).to(device)
-  
-  full_models = [("pnet", pnet_model_full), ("rnet", rnet_model_full), ("onet", onet_model_full)]
-  _4bit_models = [("pnet", pnet_model_4bit), ("rnet", rnet_model_4bit), ("onet", onet_model_4bit)]
-  binarized_models = [("pnet", pnet_model_binarized), ("rnet", rnet_model_binarized), ("onet", onet_model_binarized)]
-  ternarized_low_models = [("pnet", pnet_model_ternarized_low), ("rnet", rnet_model_ternarized_low), ("onet", onet_model_ternarized_low)]
-  ternarized_medium_models = [("pnet", pnet_model_ternarized_medium), ("rnet", rnet_model_ternarized_medium), ("onet", onet_model_ternarized_medium)]
-  ternarized_high_models = [("pnet", pnet_model_ternarized_high), ("rnet", rnet_model_ternarized_high), ("onet", onet_model_ternarized_high)]
-
-  pnet_models = [
-    ("pnet", pnet_model_full),
-    ("pnet", pnet_model_binarized),
-    ("pnet", pnet_model_ternarized_low),
-    ("pnet", pnet_model_ternarized_medium),
-    ("pnet", pnet_model_ternarized_high),
-    ("pnet", pnet_model_2bit), 
-    ("pnet", pnet_model_4bit), 
-  ]
-  rnet_models = [
-    ("rnet", rnet_model_full),
-    ("rnet", rnet_model_binarized),
-    ("rnet", rnet_model_ternarized_low),
-    ("rnet", rnet_model_ternarized_medium),
-    ("rnet", rnet_model_ternarized_high),
-    ("rnet", rnet_model_2bit), 
-    ("rnet", rnet_model_4bit), 
-  ]
-  onet_models = [
+  models = [
     ("onet", onet_model_full),
-    ("onet", onet_model_binarized),
-    ("onet", onet_model_ternarized_low),
-    ("onet", onet_model_ternarized_medium),
-    ("onet", onet_model_ternarized_high),
-    ("onet", onet_model_2bit), 
-    ("onet", onet_model_4bit), 
+    ("onet", onet_model_binary),
+    ("onet", onet_model_ternary_low),
+    ("onet", onet_model_ternary_medium),
+    ("onet", onet_model_ternary_high)
   ]
-  rnet_multibit_models = [rnet_models[-2], rnet_models[-1]]
-
-  for models in [onet_models, rnet_multibit_models]:
-    train_all(models)
-    save_onnx(models)
+  trainloader, testloader = get_dataset()
+  for models in [models]:
+    train_all(models, trainloader, testloader)
+    #save_onnx(models)
   #write_esp_dl_headers(full_models[0][1], full_models[1][1], full_models[2][1])

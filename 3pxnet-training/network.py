@@ -1,26 +1,29 @@
 import torch
-
-import numpy as np
 from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 import utils
 import utils_own
 
 import binarized_modules
 import binarized_modules_multi
+import uuid
 
 class pnet(nn.Module):
-    def __init__(self, full=False, binary=True, conv_thres=0.7, align=False):
+    def __init__(self, full=False, binary=True, conv_thres=0.7, align=True, bitwidth=1):
         super(pnet, self).__init__()
         self.align = align
         self.pruned = False
 
         self.full = full
         self.binary = binary
+        self.bitwidth = bitwidth
 
         self.conv_thres = conv_thres
+
+        self.id = str(uuid.uuid4())[:8]
 
         if full:
             self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
@@ -29,21 +32,23 @@ class pnet(nn.Module):
             self.conv4 = nn.Conv2d(32, 2, kernel_size=1, stride=1, padding=(0, 0), bias=False)
             self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
         elif binary:
-            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
-            self.conv2 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
-            self.conv3 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
-            self.conv4 = binarized_modules.BinarizeConv2d(32, 2, kernel_size=1, stride=1, padding=(0, 0), bias=False)
-            self.conv5 = binarized_modules.BinarizeConv2d(32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
-            #self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
+            #self.conv1 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv3 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            #self.conv4 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 2, kernel_size=1, stride=1, padding=(0, 0), bias=False)
+            self.conv4 = nn.Conv2d(32, 2, kernel_size=1, stride=1, padding=(0, 0), bias=False)
+            #self.conv5 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
+            self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
         else:
-            #self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
-            self.conv1 = binarized_modules.TernarizeConv2d(conv_thres, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
-            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
-            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
-            #self.conv4 = binarized_modules.BinarizeConv2d(32, 2, kernel_size=1, stride=1, padding=(0, 0), bias=False)
-            self.conv4 = binarized_modules.TernarizeConv2d(conv_thres, 32, 2, kernel_size=1, stride=1, padding=(0, 0), align=align, bias=False)
-            #self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
-            self.conv5 = binarized_modules.TernarizeConv2d(conv_thres, 32, 4, kernel_size=1, stride=1, padding=(0, 0), align=align, bias=False)
+            #self.conv1 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=False, bias=False) #cannot be aligned since # input channels < 32
+            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
+            self.conv3 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
+            #self.conv4 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 2, kernel_size=1, stride=1, padding=(0, 0), align=self.align, bias=False)
+            self.conv4 = nn.Conv2d(32, 2, kernel_size=1, stride=1, padding=(0, 0), bias=False)
+            #self.conv5 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 4, kernel_size=1, stride=1, padding=(0, 0), align=self.align, bias=False)
+            self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
 
         self.softmax1 = torch.nn.Softmax(dim = 1)
         self.act = F.relu if self.full else nn.Hardtanh()
@@ -64,21 +69,23 @@ class pnet(nn.Module):
         out1 = self.softmax1(self.bn4(self.conv4(x)))
         out2 = self.bn5(self.conv5(x))
 
-        #out1, out2 = out1.type(torch.DoubleTensor), out2.type(torch.DoubleTensor)
         return out1, out2
 
 class rnet(nn.Module):
-    def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, conv_thres=0.7, align=False):
+    def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, conv_thres=0.7, align=True, bitwidth=1):
         super(rnet, self).__init__()
         self.align = align
         self.pruned = False
 
         self.full = full
         self.binary = binary
+        self.bitwidth = bitwidth
 
         self.conv_thres = conv_thres
         self.first_sparsity = first_sparsity
         self.rest_sparsity = rest_sparsity
+        
+        self.id = str(uuid.uuid4())[:8]
 
         if full:
             self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
@@ -89,21 +96,27 @@ class rnet(nn.Module):
             self.fc2 = nn.Linear(128, 2, bias=False)
             self.fc3 = nn.Linear(128, 4, bias=False)
         elif binary:
-            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
-            self.conv2 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
-            self.conv3 = binarized_modules.BinarizeConv2d(32, 64, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            #self.conv1 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv3 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 64, kernel_size=3, stride=1, padding=(0, 0), bias=False)
 
-            self.fc1 = binarized_modules.BinarizeLinear(64, 128, bias=False)
-            self.fc2 = binarized_modules.BinarizeLinear(128, 2, bias=False)
-            self.fc3 = binarized_modules.BinarizeLinear(128, 4, bias=False)
+            self.fc1 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 64, 128, bias=False)
+            #self.fc2 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 128, 2, bias=False)
+            #self.fc3 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 128, 4, bias=False)
+            self.fc2 = nn.Linear(128, 2, bias=False)
+            self.fc3 = nn.Linear(128, 4, bias=False)
         else:
-            self.conv1 = binarized_modules.TernarizeConv2d(conv_thres, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
-            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
-            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 32, 64, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
+            #self.conv1 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=False, bias=False)
+            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
+            self.conv3 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 64, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
 
-            self.fc1 = binarized_modules.TernarizeLinear(first_sparsity, 64, 128, align=align, bias=False)
-            self.fc2 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 2, align=align, bias=False)
-            self.fc3 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 4, align=align, bias=False)
+            self.fc1 = binarized_modules_multi.TernarizeLinear(first_sparsity, bitwidth, bitwidth, 64, 128, align=self.align, bias=False)
+            #self.fc2 = binarized_modules_multi.TernarizeLinear(rest_sparsity, bitwidth, bitwidth, 128, 2, align=self.align, bias=False)
+            #self.fc3 = binarized_modules_multi.TernarizeLinear(rest_sparsity, bitwidth, bitwidth, 128, 4, align=self.align, bias=False)
+            self.fc2 = nn.Linear(128, 2, bias=False)
+            self.fc3 = nn.Linear(128, 4, bias=False)
 
         self.softmax1 = torch.nn.Softmax(dim = 1)
 
@@ -128,7 +141,6 @@ class rnet(nn.Module):
         x = self.pool2(x)
         x = self.act(self.bn3(self.conv3(x)))
         x = self.pool3(x)
-        #x = torch.flatten(x, start_dim=1)
         x = torch.reshape(x, (-1, 64))
         x = self.act(self.bn4(self.fc1(x)))
         out1 = self.softmax1(self.bn5(self.fc2(x)))
@@ -137,17 +149,20 @@ class rnet(nn.Module):
         return out1, out2
 
 class onet(nn.Module):
-    def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, conv_thres=0.7, align=False):
+    def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, conv_thres=0.7, align=True, bitwidth=1):
         super(onet, self).__init__()
         self.align = align
         self.pruned = False
 
         self.full = full
         self.binary = binary
+        self.bitwidth = bitwidth
 
         self.conv_thres = conv_thres
         self.first_sparsity = first_sparsity
         self.rest_sparsity = rest_sparsity
+    
+        self.id = str(uuid.uuid4())[:8]
 
         if full:
             self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
@@ -160,28 +175,42 @@ class onet(nn.Module):
             self.fc3 = nn.Linear(128, 4, bias=False)
             self.fc4 = nn.Linear(128, 10, bias=False)
         elif binary:
-            self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
-            self.conv2 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
-            self.conv3 = binarized_modules.BinarizeConv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
-            self.conv4 = binarized_modules.BinarizeConv2d(32, 64, kernel_size=2, stride=1, padding=(0, 0), bias=False)
+            self.conv1 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv3 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv4 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 64, kernel_size=2, stride=1, padding=(0, 0), bias=False)
 
-            self.fc1 = binarized_modules.BinarizeLinear(64, 128, bias=False)
-            self.fc2 = binarized_modules.BinarizeLinear(128, 2, bias=False)
-            self.fc3 = binarized_modules.BinarizeLinear(128, 4, bias=False)
-            #self.fc3 = nn.Linear(128, 4, bias=False)
-            self.fc4 = binarized_modules.BinarizeLinear(128, 10, bias=False)
-            #self.fc4 = nn.Linear(128, 10, bias=False)
+            self.fc1 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 64, 128, bias=False)
+            #self.fc2 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 128, 2, bias=False)
+            #self.fc3 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 128, 4, bias=False)
+            #self.fc4 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 128, 10, bias=False)
+            self.fc2 = nn.Linear(128, 2, bias=False)
+            self.fc3 = nn.Linear(128, 4, bias=False)
+            self.fc4 = nn.Linear(128, 10, bias=False)
+            """
+            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv3 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv4 = nn.Conv2d(32, 64, kernel_size=2, stride=1, padding=(0, 0), bias=False)
+
+            self.fc1 = nn.Linear(64, 128, bias=False)
+            self.fc2 = nn.Linear(128, 2, bias=False)
+            self.fc3 = nn.Linear(128, 4, bias=False)
+            self.fc4 = nn.Linear(128, 10, bias=False)
+            """
         else:
-            #self.conv1 = binarized_modules.BinarizeConv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
-            self.conv1 = binarized_modules.TernarizeConv2d(conv_thres, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
-            self.conv2 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
-            self.conv3 = binarized_modules.TernarizeConv2d(conv_thres, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=align, bias=False)
-            self.conv4 = binarized_modules.TernarizeConv2d(conv_thres, 32, 64, kernel_size=2, stride=1, padding=(0, 0), align=align, bias=False)
+            self.conv1 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=False, bias=False)
+            self.conv2 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
+            self.conv3 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
+            self.conv4 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 64, kernel_size=2, stride=1, padding=(0, 0), align=self.align, bias=False)
 
-            self.fc1 = binarized_modules.TernarizeLinear(first_sparsity, 64, 128, align=align, bias=False)
-            self.fc2 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 2, align=align, bias=False)
-            self.fc3 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 4, align=align, bias=False)
-            self.fc4 = binarized_modules.TernarizeLinear(rest_sparsity, 128, 10, align=align, bias=False)
+            self.fc1 = binarized_modules_multi.TernarizeLinear(first_sparsity, bitwidth, bitwidth, 64, 128, align=self.align, bias=False)
+            #self.fc2 = binarized_modules_multi.TernarizeLinear(rest_sparsity, bitwidth, bitwidth, 128, 2, align=self.align, bias=False)
+            #self.fc3 = binarized_modules_multi.TernarizeLinear(rest_sparsity, bitwidth, bitwidth, 128, 4, align=self.align, bias=False)
+            #self.fc4 = binarized_modules_multi.TernarizeLinear(rest_sparsity, bitwidth, bitwidth, 128, 10, align=self.align, bias=False)
+            self.fc2 = nn.Linear(128, 2, bias=False)
+            self.fc3 = nn.Linear(128, 4, bias=False)
+            self.fc4 = nn.Linear(128, 10, bias=False)
 
         self.softmax1 = torch.nn.Softmax(dim = 1)
 
@@ -199,34 +228,20 @@ class onet(nn.Module):
         self.bn6 = nn.BatchNorm1d(2)
         self.bn7 = nn.BatchNorm1d(4)
         self.bn8 = nn.BatchNorm1d(10)
-
         
     def forward(self, x):
-        print("SHAPE")
-        print(x.shape)
         x = self.act(self.bn1(self.conv1(x)))
-        print(x.shape)
         x = self.pool1(x)
-        print(x.shape)
         x = self.act(self.bn2(self.conv2(x)))
-        print(x.shape)
         x = self.pool2(x)
-        print(x.shape)
         x = self.act(self.bn3(self.conv3(x)))
-        print(x.shape)
         x = self.act(self.bn4(self.conv4(x)))
-        print(x.shape)
-        #x = torch.flatten(x, start_dim=1)
         x = torch.reshape(x, (-1, 64))
         x = self.act(self.bn5(self.fc1(x)))
-        print(x.shape)
         
         out1 = self.softmax1(self.bn6(self.fc2(x)))
-        print(x.shape)
         out2 = self.bn7(self.fc3(x))
-        print(x.shape)
         out3 = self.bn8(self.fc4(x))
-        print(x.shape)
 
         return out1, out2, out3
 
@@ -238,6 +253,7 @@ class FC_small(nn.Module):
         self.hid = hid
         self.ind = ind
         
+        full = True
         self.full = full
         self.binary = binary
         

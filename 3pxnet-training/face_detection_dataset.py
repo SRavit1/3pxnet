@@ -76,6 +76,7 @@ class FaceLandmarksDataset(torch.utils.data.Dataset):
 
         return image, (score, box, landmark)
 
+"""
 class MTCNNTrainDataset(torch.utils.data.IterableDataset):
     def __init__(self, root, data, transform=None, train=True, model='pnet', batch_size=32):
         self.root = root
@@ -139,8 +140,8 @@ class MTCNNTrainDataset(torch.utils.data.IterableDataset):
       #transposing nhwc to nchw
       images_resized = np.transpose(images_resized, (0, 3, 1, 2))
 
-      #normalize between -1 and 1
-      return (images_resized*2/255)-1
+      #normalize between 0 and 1
+      return images_resized/255
     
     def change_model(self, model, reset=True):
       if model == "pnet" or model == "rnet" or model == "onet":
@@ -240,3 +241,79 @@ class MTCNNTrainDataset(torch.utils.data.IterableDataset):
         score = torch.tensor(score.astype('float32')).to(device)
 
         return choice, image, (box, landmark, score)
+"""
+
+
+class MTCNNTrainDataset(torch.utils.data.Dataset):
+    def __init__(self, root, data, transform=None, train=True, model='onet', batch_size=32):
+        self.root = root
+        self.transform = transform
+        self.model = model
+
+        self.box_images = data["box_images"]
+        self.box_boxes = data["box_boxes"]
+        self.negative_images = data["negative_images"]
+        self.landmark_images = data["landmark_images"]
+        self.landmark_landmarks = data["landmark_landmarks"]
+
+        cutoff_ratio = 0.9
+
+        #train and test split
+        box_cutoff = int(len(self.box_images)*cutoff_ratio)
+        landmark_cutoff = int(len(self.landmark_images)*cutoff_ratio)
+        negative_cutoff = int(len(self.negative_images)*cutoff_ratio)
+
+        if train:
+            self.box_images = self.box_images[:box_cutoff]
+            self.box_boxes = self.box_boxes[:box_cutoff]
+            self.landmark_images = self.landmark_images[:landmark_cutoff]
+            self.landmark_landmarks = self.landmark_landmarks[:landmark_cutoff]
+            self.negative_images = self.negative_images[:negative_cutoff]
+        else:
+            self.box_images = self.box_images[box_cutoff:]
+            self.box_boxes = self.box_boxes[box_cutoff:]
+            self.landmark_images = self.landmark_images[landmark_cutoff:]
+            self.landmark_landmarks = self.landmark_landmarks[landmark_cutoff:]
+            self.negative_images = self.negative_images[negative_cutoff:]
+
+        # normalizing box and landmark coordinates between 0 and 1
+        self.box_boxes = self.box_boxes/48
+        self.landmark_landmarks = self.landmark_landmarks/48
+
+        # subtracting one from last two values in box
+        self.box_boxes[:,2] -= 1
+        self.box_boxes[:,3] -= 1
+
+        self.all_images = self.preprocess_images(np.concatenate((self.box_images, self.landmark_images, self.negative_images)), model).astype(np.float32)
+        self.all_labels = np.concatenate((np.array([[0.05, 0.95]]*len(self.box_images)), np.array([[0.05, 0.95]]*len(self.landmark_images)), np.array([[0.95, 0.05]]*len(self.negative_images)))).astype(np.float32)
+        if (self.model == "pnet"):
+          self.all_labels = np.reshape(self.all_labels, (-1, 2, 1, 1))
+        self.len = len(self.all_images)
+
+    @staticmethod
+    def preprocess_images(images, model):
+      #resize according to model
+      if model == 'pnet':
+        dim = 12
+      elif model == 'rnet':
+        dim = 24
+      elif model == 'onet':
+        dim = 48
+      else:
+        raise Exception("Invalid model name %s" % model)
+      
+      images_resized = np.zeros((len(images), dim, dim, 3))
+      for i in range(len(images)):
+        images_resized[i] = cv2.resize(images[i], (dim, dim))
+
+      #transposing nhwc to nchw
+      images_resized = np.transpose(images_resized, (0, 3, 1, 2))
+
+      #normalize between 0 and 1
+      return images_resized/255
+    
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, idx):
+       return self.all_images[idx], self.all_labels[idx]
