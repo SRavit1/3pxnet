@@ -11,6 +11,20 @@ import binarized_modules
 import binarized_modules_multi
 import uuid
 
+def getModelFilename(model, modelName):
+  extension = modelName + "_model"
+  if model.full:
+    extension += "_full"
+  else:
+    if model.binary:
+      extension += "_binary"
+    else:
+      extension += "_ternary"
+      extension += "_" + str(model.conv_thres)
+  extension += "_bw" + str(model.bitwidth)
+  extension += "_" + model.id
+  return extension
+
 class pnet(nn.Module):
     def __init__(self, full=False, binary=True, conv_thres=0.7, align=True, bitwidth=1):
         super(pnet, self).__init__()
@@ -20,10 +34,10 @@ class pnet(nn.Module):
         self.full = full
         self.binary = binary
         self.bitwidth = bitwidth
-
         self.conv_thres = conv_thres
-
         self.id = str(uuid.uuid4())[:8]
+        self.name = "pnet"
+        self.filename = getModelFilename(self, self.name)
 
         if full:
             self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
@@ -80,12 +94,12 @@ class rnet(nn.Module):
         self.full = full
         self.binary = binary
         self.bitwidth = bitwidth
-
         self.conv_thres = conv_thres
         self.first_sparsity = first_sparsity
         self.rest_sparsity = rest_sparsity
-        
         self.id = str(uuid.uuid4())[:8]
+        self.name = "rnet"
+        self.filename = getModelFilename(self, self.name)
 
         if full:
             self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
@@ -157,12 +171,12 @@ class onet(nn.Module):
         self.full = full
         self.binary = binary
         self.bitwidth = bitwidth
-
         self.conv_thres = conv_thres
         self.first_sparsity = first_sparsity
         self.rest_sparsity = rest_sparsity
-    
         self.id = str(uuid.uuid4())[:8]
+        self.name = "onet"
+        self.filename = getModelFilename(self, self.name)
 
         if full:
             self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)

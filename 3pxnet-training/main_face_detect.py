@@ -7,12 +7,13 @@ import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 import os
 import math
+from matplotlib import pyplot as plt
 
 from utils import *
 import utils_own
 import network
-from face_detection_dataset import MTCNNTrainDataset
 from network import pnet, rnet, onet
+from face_detection_dataset import MTCNNTrainDataset
 import esp_dl_utils
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -20,7 +21,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.manual_seed(0)
 np.random.seed(0)
 
-EPOCHS = 25 # 25E
+EPOCHS = 25 # 25
 EPOCHS_2 = 200 # 200
 
 def calcAccuracy(pred_score, actual_score):
@@ -74,46 +75,25 @@ def get_dataset():
   onet_trainloader = MTCNNTrainDataset(root, data, batch_size=batch, train=True, model='onet')
   onet_testloader = MTCNNTrainDataset(root, data, batch_size=batch, train=False, model='onet')
 
-
   return pnet_trainloader, pnet_testloader, rnet_trainloader, rnet_testloader, onet_trainloader, onet_testloader
  
-def forward(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch=0, training=True, optimizer=None, verbal=False, keras=False):
-  if keras:
-    assert not training, "keras option not compatible with training mode"
-  
+def forward(data_loader, model, score_criterion, box_landmark_criterion, epoch=0, training=True, optimizer=None, verbal=False): 
+  logName = ""
+
   score_losses = AverageMeter()
   box_losses = AverageMeter()
   landmark_losses = AverageMeter()
   score_accs = AverageMeter()
   score_f1s = AverageMeter()
 
-  if modelName not in ["pnet", "rnet", "onet"]:
-    raise Exception("Invalid model name %s" % modelName)
+  if model.name not in ["pnet", "rnet", "onet"]:
+    raise Exception("Invalid model name %s" % model.name)
   
-  #data_loader.change_model(modelName)
-
-  #data_loader_iter = iter(data_loader)
   BS = 32
   dataset_loader = DataLoader(data_loader, batch_size=BS, shuffle=True)
   batch = 0
   batches_total = math.ceil(float(len(data_loader)) / BS)
-  if epoch%10==9 and training:
-    print()
-  #for choice, image, (box, landmark, score) in data_loader_iter:
   for image, score in dataset_loader:
-      """
-      if training and verbal and batch % 100 == 0:
-        message = '\rEpoch: [{0}]\t'.format(epoch)
-        message += 'Batch {0}/{1}\t'.format(batch, batches_total)
-        message += 'Training score acc {score_acc.avg:.4f}\t'.format(score_acc=score_accs)
-        message += 'Training score f1 {score_f1.avg:.4f}\t'.format(score_f1=score_f1s)
-        message += 'Training score loss {score_loss.avg:.4f}\t'.format(score_loss=score_losses)
-        message += 'Training box loss {box_loss.avg:.4f}\t'.format(box_loss=box_losses)
-        if modelName == 'onet':
-          message += 'Training landmark loss {landmark_loss.avg:.4f}\t'.format(landmark_loss=landmark_losses)
-        print(message, end='')
-      """
-
       input_var = Variable(image).to(device)
       score_var = Variable(score).to(device)
       """
@@ -122,7 +102,7 @@ def forward(data_loader, model, modelName, score_criterion, box_landmark_criteri
       if landmark is not None:
         landmark_var = Variable(landmark)
       """
-      if modelName in ["pnet", "rnet"]:
+      if model.name in ["pnet", "rnet"]:
         score_out, box_out = model(input_var)
       else:
         score_out, box_out, landmark_out = model(input_var)
@@ -163,34 +143,33 @@ def forward(data_loader, model, modelName, score_criterion, box_landmark_criteri
                p.weight_org.copy_(p.weight.data.clamp_(-1,1))
       batch += 1
 
+  prefix = 'Training ' if training else 'Validation '
+  if training:
+    message = '\nEpoch: [{0}]\t'.format(epoch)
+  else:
+    message = ''
+  message += prefix + 'score acc {score_acc.avg:.4f}\t'.format(score_acc=score_accs)
+  message += prefix + 'score f1 {score_f1.avg:.4f}\t'.format(score_f1=score_f1s)
+  message += prefix + 'score loss {score_loss.avg:.4f}\t'.format(score_loss=score_losses)
+  message += prefix + 'box loss {box_loss.avg:.4f}\t'.format(box_loss=box_losses)
+  if model.name == "onet":
+    message += prefix + 'landmark loss {landmark_loss.avg:.4f}\t'.format(landmark_loss=landmark_losses)
+  with open(os.path.join("training_logs", model.name, model.filename + ".txt"), "a") as f:
+    f.write(message) 
   if epoch%10==9 and verbal:
-    if training:
-      print('\r', end='')
-    prefix = 'Training ' if training else 'Validation '
-    if training:
-      message = 'Epoch: [{0}]\t'.format(epoch)
-    else:
-      message = ''
-    message += prefix + 'score acc {score_acc.avg:.4f}\t'.format(score_acc=score_accs)
-    message += prefix + 'score f1 {score_f1.avg:.4f}\t'.format(score_f1=score_f1s)
-    message += prefix + 'score loss {score_loss.avg:.4f}\t'.format(score_loss=score_losses)
-    message += prefix + 'box loss {box_loss.avg:.4f}\t'.format(box_loss=box_losses)
-    if modelName == "onet":
-      message += prefix + 'landmark loss {landmark_loss.avg:.4f}\t'.format(landmark_loss=landmark_losses)
     print(message, end='')
       
-  return score_losses.avg, box_losses.avg
+  return score_accs.avg, score_f1s.avg, score_losses.avg
 
-
-def train(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer, verbal=True):
+def train(data_loader, model, score_criterion, box_landmark_criterion, epoch, optimizer, verbal=False):
    # switch to train mode
    model.train()
-   return forward(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch, training=True, optimizer=optimizer, verbal=verbal)
+   return forward(data_loader, model, score_criterion, box_landmark_criterion, epoch, training=True, optimizer=optimizer, verbal=verbal)
 
-def validate(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True):
+def validate(data_loader, model, score_criterion, box_landmark_criterion, epoch, verbal=False):
    # switch to evaluate mode
    model.eval()
-   return forward(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch, training=False, optimizer=None, verbal=verbal)
+   return forward(data_loader, model, score_criterion, box_landmark_criterion, epoch, training=False, optimizer=None, verbal=verbal)
 
 def train_all(models):
   pnet_trainloader, pnet_testloader, rnet_trainloader, rnet_testloader, onet_trainloader, onet_testloader = get_dataset()
@@ -199,24 +178,19 @@ def train_all(models):
   box_landmark_criterion = nn.MSELoss()
   lr_decay = np.power((2e-6/learning_rate), (1./100))
   pack=32
+  
+  for model in models:
+    print("Begin training", model.filename)
 
-  for (modelName, model) in models:
-    print("Begin training", modelName, "id", model.id, end='')
-    if model.full:
-      extension = "_full"
-    else:
-      if model.binary:
-        extension = "_binary"
-      else:
-        extension = "_ternary"
-    extension += "_bw" + str(model.bitwidth)
-    save_file = modelName + "_model" + extension + "_" + model.id + ".pt"
+    trainHistory = {"train loss": [], "train acc": [], "train f1": [], "val loss": [], "val acc": [], "val f1": []}
 
-    if modelName == "pnet":
+    save_file = os.path.join(os.getcwd(), "torch_saved_models", model.name, model.filename + ".pt")
+
+    if model.name == "pnet":
       trainloader, testloader = pnet_trainloader, pnet_testloader
-    elif modelName == "rnet":
+    elif model.name == "rnet":
       trainloader, testloader = rnet_trainloader, rnet_testloader
-    elif modelName == "onet":
+    elif model.name == "onet":
       trainloader, testloader = onet_trainloader, onet_testloader
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -224,11 +198,16 @@ def train_all(models):
 
     utils_own.adjust_pack(model, 1)
     for epoch in range(0, EPOCHS):
-      train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer, verbal=True)
-      val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
+      train_score_acc, train_score_f1, train_score_loss = train(trainloader, model, score_criterion, box_landmark_criterion, epoch, optimizer)
+      val_score_acc, val_score_f1, val_score_loss = validate(testloader, model, score_criterion, box_landmark_criterion, epoch)
       scheduler.step()
 
-    torch.save(model, save_file)
+      trainHistory["train loss"].append(train_score_loss)
+      trainHistory["train acc"].append(train_score_acc)
+      trainHistory["train f1"].append(train_score_f1)
+      trainHistory["val loss"].append(val_score_loss)
+      trainHistory["val acc"].append(val_score_acc)
+      trainHistory["val f1"].append(val_score_f1)
 
     utils_own.adjust_pack(model, pack)
     utils_own.permute_all_weights_once(model, pack=pack, mode=-1)
@@ -237,9 +216,16 @@ def train_all(models):
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
 
     for epoch in range(0, EPOCHS):
-      train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer)
-      val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
+      train_score_acc, train_score_f1, train_score_loss = train(trainloader, model, score_criterion, box_landmark_criterion, epoch, optimizer)
+      val_score_acc, val_score_f1, val_score_loss = validate(testloader, model, score_criterion, box_landmark_criterion, epoch)
       scheduler.step()
+
+      trainHistory["train loss"].append(train_score_loss)
+      trainHistory["train acc"].append(train_score_acc)
+      trainHistory["train f1"].append(train_score_f1)
+      trainHistory["val loss"].append(val_score_loss)
+      trainHistory["val acc"].append(val_score_acc)
+      trainHistory["val f1"].append(val_score_f1)
 
     # Fix pruned packs and fine tune
     for mod in model.modules():
@@ -251,16 +237,67 @@ def train_all(models):
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
     lowest_loss = 100 #starting value
 
+    best_score_epoch = None
+    best_score_acc = 0
+    best_score_f1 = None
+    best_score_loss = None
     for epoch in range(0, EPOCHS_2):
-      train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer)
-      val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
+      train_score_acc, train_score_f1, train_score_loss = train(trainloader, model, score_criterion, box_landmark_criterion, epoch, optimizer)
+      val_score_acc, val_score_f1, val_score_loss = validate(testloader, model, score_criterion, box_landmark_criterion, epoch)
+      scheduler.step()
+
+      trainHistory["train loss"].append(train_score_loss)
+      trainHistory["train acc"].append(train_score_acc)
+      trainHistory["train f1"].append(train_score_f1)
+      trainHistory["val loss"].append(val_score_loss)
+      trainHistory["val acc"].append(val_score_acc)
+      trainHistory["val f1"].append(val_score_f1)
 
       # remember best loss and save checkpoint
-      is_best = val_score_loss + val_box_loss < lowest_loss
-      if is_best:
-         lowest_loss = val_score_loss + val_box_loss
+      if val_score_acc > best_score_acc:
+         best_score_epoch = epoch
+         best_score_acc = val_score_acc
+         best_score_f1 = val_score_f1
+         best_score_loss = val_score_loss
+         
          torch.save(model, save_file)
-      scheduler.step()
+
+    trainHistory["best epoch"] = best_score_epoch
+
+    message = 'Best Epoch: [{0}]\t'.format(best_score_epoch)
+    message += 'val score acc {0:.4f}\t'.format(best_score_acc)
+    message += 'val score f1 {0:.4f}\t'.format(best_score_f1)
+    message += 'val score loss {0:.4f}'.format(best_score_loss)
+    print(message)
+    with open(os.path.join("training_logs", model.name, model.filename + ".txt"), "a") as f:
+      f.write("\n" + message)
+
+    #history[model.filename] = trainHistory
+    filename, data = model.filename, trainHistory
+    plt.clf()
+
+    train_loss_line, = plt.plot(data["train loss"], label="train loss")
+    train_acc_line, = plt.plot(data["train acc"], label="train acc")
+    train_f1_line, = plt.plot(data["train f1"], label="train f1")
+    val_loss_line, = plt.plot(data["val loss"], label="val loss")
+    val_acc_line, = plt.plot(data["val acc"], label="val acc")
+    val_f1_line, = plt.plot(data["val f1"], label="val f1")
+
+    """
+    train_loss_line.set_label("train loss")
+    train_acc_line.set_label("train acc")
+    train_f1_line.set_label("train f1")
+    val_loss_line.set_label("val loss")
+    val_acc_line.set_label("val acc")
+    val_f1_line.set_label("val f1")
+    """
+
+    plt.axvline(x=EPOCHS+EPOCHS+data["best epoch"])
+
+    plt.legend()
+    plt.xlabel("Epoch")
+    plt.title(filename + " training history")
+    plt.savefig(os.path.join("training_history_imgs", filename.split("_")[0], filename + ".png"))
 
 def write_esp_dl_headers(pnet_model, rnet_model, onet_model):
     weight = {
@@ -394,7 +431,7 @@ def write_esp_dl_headers(pnet_model, rnet_model, onet_model):
     esp_dl_utils.writeQuantizedWeights(weight)
 
 def save_onnx(models):
-    for (modelName, model) in models:
+    for model in models:
       if model.full:
         suffix = "_full"
       elif model.binary:
@@ -409,23 +446,23 @@ def save_onnx(models):
           suffix += "_high"
       suffix += "_bw" + str(model.bitwidth)
 
-      if "pnet" in modelName:
+      if "pnet" in model.name:
         dim = 12
-      elif "rnet" in modelName:
+      elif "rnet" in model.name:
         dim = 24
-      elif "onet" in modelName:
+      elif "onet" in model.name:
         dim = 48
       else: #error
         dim = -1
 
       model.eval()
-      onnxFilename = "training_data/" + modelName + suffix + "_" + model.id + ".onnx"
+      onnxFilename = os.path.join("training_data", model.filename + ".onnx")
       size = (1, 3, dim, dim)
       x=Variable(torch.randn(size,requires_grad=True).to(device))
       #for binarized/ternarized networks, model.forward is necessary for weights to be appropriately binarized and sparsified
       with torch.no_grad():
         torch_pred = [out.cpu().detach().numpy().flatten() for out in model.forward(x)]
-        print(modelName, "torch prediction", [out[:10] for out in torch_pred])
+        print(model.name, "torch prediction", [out[:10] for out in torch_pred])
       torch.onnx.export(model,x,onnxFilename,opset_version=9,input_names = ['input'], output_names = ['output'])
 
 if __name__ == "__main__":
@@ -455,43 +492,44 @@ if __name__ == "__main__":
   rnet_model_ternarized_high = rnet(full=False, binary=False, first_sparsity=sparsity_high, rest_sparsity=sparsity_high, conv_thres=sparsity_high).to(device)
   onet_model_ternarized_high = onet(full=False, binary=False, first_sparsity=sparsity_high, rest_sparsity=sparsity_high, conv_thres=sparsity_high).to(device)
   
-  full_models = [("pnet", pnet_model_full), ("rnet", rnet_model_full), ("onet", onet_model_full)]
-  _4bit_models = [("pnet", pnet_model_4bit), ("rnet", rnet_model_4bit), ("onet", onet_model_4bit)]
-  binarized_models = [("pnet", pnet_model_binarized), ("rnet", rnet_model_binarized), ("onet", onet_model_binarized)]
-  ternarized_low_models = [("pnet", pnet_model_ternarized_low), ("rnet", rnet_model_ternarized_low), ("onet", onet_model_ternarized_low)]
-  ternarized_medium_models = [("pnet", pnet_model_ternarized_medium), ("rnet", rnet_model_ternarized_medium), ("onet", onet_model_ternarized_medium)]
-  ternarized_high_models = [("pnet", pnet_model_ternarized_high), ("rnet", rnet_model_ternarized_high), ("onet", onet_model_ternarized_high)]
+  full_models = [pnet_model_full, rnet_model_full, onet_model_full]
+  _4bit_models = [pnet_model_4bit, rnet_model_4bit, onet_model_4bit]
+  _2bit_models = [pnet_model_2bit, rnet_model_2bit, onet_model_2bit]
+  binarized_models = [pnet_model_binarized, rnet_model_binarized, onet_model_binarized]
+  ternarized_low_models = [pnet_model_ternarized_low, rnet_model_ternarized_low, onet_model_ternarized_low]
+  ternarized_medium_models = [pnet_model_ternarized_medium, rnet_model_ternarized_medium, onet_model_ternarized_medium]
+  ternarized_high_models = [pnet_model_ternarized_high, rnet_model_ternarized_high, onet_model_ternarized_high]
 
   pnet_models = [
-    ("pnet", pnet_model_full),
-    ("pnet", pnet_model_binarized),
-    ("pnet", pnet_model_ternarized_low),
-    ("pnet", pnet_model_ternarized_medium),
-    ("pnet", pnet_model_ternarized_high),
-    ("pnet", pnet_model_2bit), 
-    ("pnet", pnet_model_4bit), 
+    pnet_model_full,
+    pnet_model_binarized,
+    pnet_model_ternarized_low,
+    pnet_model_ternarized_medium,
+    pnet_model_ternarized_high,
+    pnet_model_2bit, 
+    pnet_model_4bit, 
   ]
   rnet_models = [
-    ("rnet", rnet_model_full),
-    ("rnet", rnet_model_binarized),
-    ("rnet", rnet_model_ternarized_low),
-    ("rnet", rnet_model_ternarized_medium),
-    ("rnet", rnet_model_ternarized_high),
-    ("rnet", rnet_model_2bit), 
-    ("rnet", rnet_model_4bit), 
+    rnet_model_full,
+    rnet_model_binarized,
+    rnet_model_ternarized_low,
+    rnet_model_ternarized_medium,
+    rnet_model_ternarized_high,
+    rnet_model_2bit, 
+    rnet_model_4bit, 
   ]
   onet_models = [
-    ("onet", onet_model_full),
-    ("onet", onet_model_binarized),
-    ("onet", onet_model_ternarized_low),
-    ("onet", onet_model_ternarized_medium),
-    ("onet", onet_model_ternarized_high),
-    ("onet", onet_model_2bit), 
-    ("onet", onet_model_4bit), 
+    onet_model_full,
+    onet_model_binarized,
+    onet_model_ternarized_low,
+    onet_model_ternarized_medium,
+    onet_model_ternarized_high,
+    onet_model_2bit, 
+    onet_model_4bit, 
   ]
-  rnet_multibit_models = [rnet_models[-2], rnet_models[-1]]
 
-  for models in [onet_models, rnet_multibit_models]:
+  for models in [_4bit_models, _2bit_models]:
     train_all(models)
-    save_onnx(models)
+    #save_onnx(models)
   #write_esp_dl_headers(full_models[0][1], full_models[1][1], full_models[2][1])
+  
