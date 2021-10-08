@@ -163,7 +163,7 @@ class rnet(nn.Module):
         return out1, out2
 
 class onet(nn.Module):
-    def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, conv_thres=0.7, align=True, bitwidth=1):
+    def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, conv_thres=0.7, align=True, bitwidth=1, input_bitwidth=1):
         super(onet, self).__init__()
         self.align = align
         self.pruned = False
@@ -171,6 +171,7 @@ class onet(nn.Module):
         self.full = full
         self.binary = binary
         self.bitwidth = bitwidth
+        self.input_bitwidth = input_bitwidth
         self.conv_thres = conv_thres
         self.first_sparsity = first_sparsity
         self.rest_sparsity = rest_sparsity
@@ -189,7 +190,7 @@ class onet(nn.Module):
             self.fc3 = nn.Linear(128, 4, bias=False)
             self.fc4 = nn.Linear(128, 10, bias=False)
         elif binary:
-            self.conv1 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            self.conv1 = binarized_modules_multi.BinarizeConv2d(input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv2 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv3 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv4 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 64, kernel_size=2, stride=1, padding=(0, 0), bias=False)
@@ -213,7 +214,7 @@ class onet(nn.Module):
             self.fc4 = nn.Linear(128, 10, bias=False)
             """
         else:
-            self.conv1 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=False, bias=False)
+            self.conv1 = binarized_modules_multi.TernarizeConv2d(conv_thres, input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=False, bias=False)
             self.conv2 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
             self.conv3 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
             self.conv4 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 64, kernel_size=2, stride=1, padding=(0, 0), align=self.align, bias=False)

@@ -15,7 +15,8 @@ from face_detection_dataset import MTCNNTrainDataset
 from network import pnet, rnet, onet
 import esp_dl_utils
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cpu')
 
 torch.manual_seed(0)
 np.random.seed(0)
@@ -66,12 +67,15 @@ def get_dataset():
   }
 
   batch=32
-  trainloader = MTCNNTrainDataset(root, data, batch_size=batch, train=True)
-  testloader = MTCNNTrainDataset(root, data, batch_size=batch, train=False)
 
+  pnet_trainloader = MTCNNTrainDataset(root, data, batch_size=batch, train=True, model='pnet')
+  pnet_testloader = MTCNNTrainDataset(root, data, batch_size=batch, train=False, model='pnet')
+  rnet_trainloader = MTCNNTrainDataset(root, data, batch_size=batch, train=True, model='rnet')
+  rnet_testloader = MTCNNTrainDataset(root, data, batch_size=batch, train=False, model='rnet')
+  onet_trainloader = MTCNNTrainDataset(root, data, batch_size=batch, train=True, model='onet')
+  onet_testloader = MTCNNTrainDataset(root, data, batch_size=batch, train=False, model='onet')
 
-  return trainloader, testloader
- 
+  return pnet_trainloader, pnet_testloader, rnet_trainloader, rnet_testloader, onet_trainloader, onet_testloader
 
 def forward(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch=0, training=True, optimizer=None, verbal=False, keras=False):
   if keras:
@@ -187,7 +191,7 @@ def validate(data_loader, model, modelName, score_criterion, box_landmark_criter
    model.eval()
    return forward(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch, training=False, optimizer=None, verbal=verbal)
 
-def train_all(models, trainloader, testloader):
+def test_all(models, trainloader, testloader):
   learning_rate = 1e-4
   score_criterion = nn.BCEWithLogitsLoss()
   box_landmark_criterion = nn.MSELoss()
@@ -414,22 +418,53 @@ def save_onnx(models):
         print(modelName, "torch prediction", [out[:10] for out in torch_pred])
       torch.onnx.export(model,x,onnxFilename,opset_version=9,input_names = ['input'], output_names = ['output'])
 
+def convertToQuantized(model):
+  for param in model.parameters():
+    quantized_value = torch.tensor(esp_dl_utils.getApproximateQuantizedWeight(param.detach())[1].numpy())
+    with torch.no_grad():
+      param.copy_(quantized_value)
+    #for i in range(len(param.data)):
+      #param.data[i] = esp_dl_utils.getApproximateQuantizedWeight(param.data[i])[1]
+  return model
+
 if __name__ == "__main__":
-  onet_model_full = torch.load("onet_model_full_88ac95db.pt")
-  onet_model_binary = torch.load("onet_model_binary_14b9882c.pt")
-  onet_model_ternary_low = torch.load("onet_model_ternary_3b35eb42.pt")
-  onet_model_ternary_medium = torch.load("onet_model_ternary_875f02f0.pt")
-  onet_model_ternary_high = torch.load("onet_model_ternary_b1d52762.pt")
+  pnet_model_full = torch.load("torch_saved_models/pnet/pnet_model_full_bw1_37b51e17.pt").to(device)
+  rnet_model_full = torch.load("torch_saved_models/rnet/rnet_model_full_bw1_d0c9dcf7.pt").to(device)
+  onet_model_full = torch.load("torch_saved_models/onet/onet_model_full_bw1_736d3f51.pt").to(device)
+
+  pnet_model_qu = torch.load("torch_saved_models/pnet/pnet_model_full_bw1_37b51e17.pt").to(device)
+  rnet_model_qu = torch.load("torch_saved_models/rnet/rnet_model_full_bw1_d0c9dcf7.pt").to(device)
+  onet_model_qu = torch.load("torch_saved_models/onet/onet_model_full_bw1_736d3f51.pt").to(device)
+
+  pnet_model_qu = convertToQuantized(pnet_model_qu)
+  rnet_model_qu = convertToQuantized(rnet_model_qu)
+  onet_model_qu = convertToQuantized(onet_model_qu)
+
+  #pnet_model_binarized = torch.load("torch_saved_models/pnet/").to(device)
+  #rnet_model_binarized = torch.load("torch_saved_models/rnet/").to(device)
+  onet_model_binarized = torch.load("torch_saved_models/onet/onet_model_binary_bw1_be54da04.pt").to(device)
 
   models = [
+    ("pnet", pnet_model_full),
+    ("rnet", rnet_model_full),
     ("onet", onet_model_full),
-    ("onet", onet_model_binary),
-    ("onet", onet_model_ternary_low),
-    ("onet", onet_model_ternary_medium),
-    ("onet", onet_model_ternary_high)
+    ("pnet", pnet_model_qu),
+    ("rnet", rnet_model_qu),
+    ("onet", onet_model_qu),
+    ("onet", onet_model_binarized)
   ]
-  trainloader, testloader = get_dataset()
-  for models in [models]:
-    train_all(models, trainloader, testloader)
-    #save_onnx(models)
+  models = [models[-1]]
+
+  pnet_trainloader, pnet_testloader, rnet_trainloader, rnet_testloader,onet_trainloader, onet_testloader, = get_dataset()
+  for model in [models]:
+    """
+    if model[0] == "pnet":
+      trainloader, testloader = pnet_trainloader, pnet_testloader
+    elif model[0] == "rnet":
+      trainloader, testloader = rnet_trainloader, rnet_testloader
+    elif model[0] == "onet":
+      trainloader, testloader = onet_trainloader, onet_testloader
+    test_all(model, trainloader, testloader)
+    """
+    save_onnx(models)
   #write_esp_dl_headers(full_models[0][1], full_models[1][1], full_models[2][1])

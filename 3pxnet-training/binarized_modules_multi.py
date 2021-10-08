@@ -26,7 +26,8 @@ def quantize(number,bitwidth):
 
 def Binarize(tensor,quant_mode='det',bitwidth=2):
     if quant_mode == 'input':
-        return torch.round(tensor.mul_(45))
+        #return torch.round(tensor.mul_(45))
+        return torch.clamp(tensor.mul_(45).div_(128),min=-0.99,max=0.99)
     if quant_mode=='multi':
         #return tensor.sign()
         #temp = torch.floor(tensor.div_(2)).mul_(2).add_(1).mul_(tensor).div_(tensor)
@@ -162,10 +163,15 @@ class BinarizeConv2d(nn.Conv2d):
         #self.exp=True
 
     def forward(self, input):
+        """
         if input.size(1) != 3 and input.size(1) != 1:
             input.data = Binarize(input.data,quant_mode='multi',bitwidth=self.input_bit)
         else:
             input.data = Binarize(input.data, quant_mode='input', bitwidth=self.input_bit)
+        """
+        input.data = Binarize(input.data, quant_mode="input", bitwidth=self.input_bit)
+        input.data = Binarize(input.data, quant_mode="multi", bitwidth=self.input_bit)
+        #print("input bit", self.input_bit, "Debug: BinarizeConv2d input data after binarization:", np.unique(input.data.flatten().numpy()))
         #self.exp=True
         self.weight.data=Binarize(self.weight_org)
         #if self.exp:
