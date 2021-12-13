@@ -160,6 +160,7 @@ class BinarizeConv2d(nn.Conv2d):
         self.register_buffer('weight_org', self.weight.data.clone())
         self.input_bit = input_bit
         self.output_bit = output_bit
+        self.binarize_input = True
         #self.exp=True
 
     def forward(self, input):
@@ -169,8 +170,14 @@ class BinarizeConv2d(nn.Conv2d):
         else:
             input.data = Binarize(input.data, quant_mode='input', bitwidth=self.input_bit)
         """
+        #print("DEBUG BINARIZECONV2D INPUT VALUES BEFORE BINARIZATION", torch.flatten(input.data)[:20])
         input.data = Binarize(input.data, quant_mode="input", bitwidth=self.input_bit)
-        input.data = Binarize(input.data, quant_mode="multi", bitwidth=self.input_bit)
+        if self.binarize_input:
+          input.data = Binarize(input.data, quant_mode="multi", bitwidth=self.input_bit)
+        #ISSUE: When onet remaining layers have bitwidth 2, the parameter values are only -0.25 to 0.25. No values in range -0.75 to 0.75. Not sure why. Need to debug
+        #print("DEBUG BINARIZECONV2D self.binarize_input self.input_bit", self.binarize_input, self.input_bit)
+        #print("DEBUG BINARIZECONV2D INPUT VALUES", torch.flatten(input.data)[:20])
+        #print("DEBUG BINARIZECONV2D MIN MAX VALUES", torch.max(input.data), torch.min(input.data))
         #print("input bit", self.input_bit, "Debug: BinarizeConv2d input data after binarization:", np.unique(input.data.flatten().numpy()))
         #self.exp=True
         self.weight.data=Binarize(self.weight_org)
@@ -195,7 +202,7 @@ class BinarizeConv2d(nn.Conv2d):
     
 class TernarizeConv2d(nn.Conv2d):
 
-    def __init__(self, thres, input_bit=1, output_bit=1,*kargs, **kwargs):
+    def __init__(self, thres, input_bit=1, output_bit=1, *kargs, **kwargs):
         try:
             pack = kwargs['pack']
         except:
@@ -216,6 +223,7 @@ class TernarizeConv2d(nn.Conv2d):
             del(kwargs['align'])
         self.input_bit = input_bit
         self.output_bit = output_bit
+        self.binarize_input = True
         super(TernarizeConv2d, self).__init__(*kargs, **kwargs)
         permute = min(permute, self.weight.size(0))
         self.register_buffer('pack', torch.LongTensor([pack]))
@@ -225,14 +233,18 @@ class TernarizeConv2d(nn.Conv2d):
         self.register_buffer('weight_org', self.weight.data.clone())
 
     def forward(self, input, pruned=False):
-
-        if input.size(1) != 3 and input.size(1) != 1:
-            if self.input_bit==8:
-                input.data = torch.round(input.data.clamp_(-128,127))
-            else:
-                input.data = Binarize(input.data,quant_mode='multi',bitwidth=self.input_bit)
+        if self.binarize_input:
+          input.data = Binarize(input.data, quant_mode="input", bitwidth=self.input_bit)
+          input.data = Binarize(input.data, quant_mode="multi", bitwidth=self.input_bit)
         else:
-            input.data = Binarize(input.data, quant_mode='input', bitwidth=self.input_bit)
+          if input.size(1) != 3 and input.size(1) != 1:
+              if self.input_bit==8:
+                  input.data = torch.round(input.data.clamp_(-128,127))
+              else:
+                  input.data = Binarize(input.data,quant_mode='multi',bitwidth=self.input_bit)
+          else:
+              input.data = Binarize(input.data, quant_mode='input', bitwidth=self.input_bit)
+
         self.weight.data=Ternarize(self.weight_org, self.thres, self.mask, self.permute_list, pruned, align=self.align, pack=self.pack.item())
         #self.exp=True
         #if self.exp:

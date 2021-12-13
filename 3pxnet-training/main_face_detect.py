@@ -22,8 +22,8 @@ device = torch.device('cpu')
 torch.manual_seed(0)
 np.random.seed(0)
 
-EPOCHS = 25 # 25
-EPOCHS_2 = 200 # 200
+EPOCHS = 1 # 25
+EPOCHS_2 = 1 # 200
 
 def calcAccuracy(pred_score, actual_score):
   #acc = torch.mean((torch.argmax(pred_score, dim=1) == actual_score).type(torch.FloatTensor))
@@ -471,6 +471,7 @@ if __name__ == "__main__":
   sparsity_medium = 0.5
   sparsity_high = 0.9
 
+  """
   pnet_model_full = pnet(full=True).to(device)
   rnet_model_full = rnet(full=True).to(device)
   onet_model_full = onet(full=True).to(device)
@@ -493,11 +494,6 @@ if __name__ == "__main__":
   rnet_model_ternarized_high = rnet(full=False, binary=False, first_sparsity=sparsity_high, rest_sparsity=sparsity_high, conv_thres=sparsity_high).to(device)
   onet_model_ternarized_high = onet(full=False, binary=False, first_sparsity=sparsity_high, rest_sparsity=sparsity_high, conv_thres=sparsity_high).to(device)
   
-  onet_model_binarized_inputbw1 = onet(full=False, binary=True, input_bitwidth=1).to(device)
-  onet_model_binarized_inputbw2 = onet(full=False, binary=True, input_bitwidth=2).to(device)
-  onet_model_binarized_inputbw3 = onet(full=False, binary=True, input_bitwidth=3).to(device)
-  onet_model_binarized_inputbw4 = onet(full=False, binary=True, input_bitwidth=4).to(device)
-
   full_models = [pnet_model_full, rnet_model_full, onet_model_full]
   _4bit_models = [pnet_model_4bit, rnet_model_4bit, onet_model_4bit]
   _2bit_models = [pnet_model_2bit, rnet_model_2bit, onet_model_2bit]
@@ -533,16 +529,28 @@ if __name__ == "__main__":
     onet_model_2bit, 
     onet_model_4bit, 
   ]
-  onet_input_bitwidth_models = [
-    onet_model_binarized_inputbw1,
-    onet_model_binarized_inputbw2,
-    onet_model_binarized_inputbw3,
-    onet_model_binarized_inputbw4,
-  ]
 
+  onet_input_bitwidth_models = []
+  for input_bitwidth in [2, 4, 6]:
+    onet_input_bitwidth_models.append(onet(full=False, binary=True, input_bitwidth=input_bitwidth, bitwidth=2).to(device))
+  """
+  rnet_model_ternarized_high = rnet(full=False, binary=False, first_sparsity=sparsity_high, rest_sparsity=sparsity_high, conv_thres=sparsity_high, binarize_input=False).to(device)
+
+  pnet_input_bitwidth_models = []
+  for input_bitwidth in [2, 4, 6]:
+    for bitwidth in [1, 2]:
+      pnet_input_bitwidth_models.append(pnet(full=False, binary=True, input_bitwidth=input_bitwidth, bitwidth=bitwidth).to(device))
+  rnet_input_bitwidth_models = []
+  for input_bitwidth in [2, 4, 6]:
+    for bitwidth in [1, 2]:
+      rnet_input_bitwidth_models.append(rnet(full=False, binary=True, input_bitwidth=input_bitwidth, bitwidth=bitwidth).to(device))
+  onet_input_bitwidth_models = []
+  for input_bitwidth in [6, 4, 2]: #[2, 4, 6]:
+    for bitwidth in [1, 2]:
+      onet_input_bitwidth_models.append(onet(full=False, binary=True, input_bitwidth=input_bitwidth, bitwidth=bitwidth).to(device))
 
   for models in [onet_input_bitwidth_models]:
     train_all(models)
-    #save_onnx(models)
+    save_onnx(models)
   #write_esp_dl_headers(full_models[0][1], full_models[1][1], full_models[2][1])
   

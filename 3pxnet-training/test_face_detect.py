@@ -101,27 +101,8 @@ def forward(data_loader, model, modelName, score_criterion, box_landmark_criteri
     print()
   #for choice, image, (box, landmark, score) in data_loader_iter:
   for image, score in dataset_loader:
-      """
-      if training and verbal and batch % 100 == 0:
-        message = '\rEpoch: [{0}]\t'.format(epoch)
-        message += 'Batch {0}/{1}\t'.format(batch, batches_total)
-        message += 'Training score acc {score_acc.avg:.4f}\t'.format(score_acc=score_accs)
-        message += 'Training score f1 {score_f1.avg:.4f}\t'.format(score_f1=score_f1s)
-        message += 'Training score loss {score_loss.avg:.4f}\t'.format(score_loss=score_losses)
-        message += 'Training box loss {box_loss.avg:.4f}\t'.format(box_loss=box_losses)
-        if modelName == 'onet':
-          message += 'Training landmark loss {landmark_loss.avg:.4f}\t'.format(landmark_loss=landmark_losses)
-        print(message, end='')
-      """
-
       input_var = Variable(image).to(device)
       score_var = Variable(score).to(device)
-      """
-      if box is not None:
-        box_var = Variable(box)
-      if landmark is not None:
-        landmark_var = Variable(landmark)
-      """
       if modelName in ["pnet", "rnet"]:
         score_out, box_out = model(input_var)
       else:
@@ -138,16 +119,6 @@ def forward(data_loader, model, modelName, score_criterion, box_landmark_criteri
       score_f1s.update(score_f1, image.size(0))
 
       loss = score_loss
-      """
-      if choice == 0:
-        box_loss = box_landmark_criterion(box_out, box_var)*1e3
-        box_losses.update(box_loss.item(), image.size(0))
-        loss += box_loss
-      elif choice == 1:
-        landmark_loss = box_landmark_criterion(landmark_out, landmark_var)*1e3
-        landmark_losses.update(landmark_loss.item(), image.size(0))
-        loss += landmark_loss
-      """
       score_acc = calcAccuracy(score_out, torch.argmax(score_var, dim=1))
 
       if training:
@@ -163,23 +134,7 @@ def forward(data_loader, model, modelName, score_criterion, box_landmark_criteri
                p.weight_org.copy_(p.weight.data.clamp_(-1,1))
       batch += 1
 
-  if verbal:
-    if training:
-      print('\r', end='')
-    prefix = 'Training ' if training else 'Validation '
-    if training:
-      message = 'Epoch: [{0}]\t'.format(epoch)
-    else:
-      message = ''
-    message += prefix + 'score acc {score_acc.avg:.4f}\t'.format(score_acc=score_accs)
-    message += prefix + 'score f1 {score_f1.avg:.4f}\t'.format(score_f1=score_f1s)
-    message += prefix + 'score loss {score_loss.avg:.4f}\t'.format(score_loss=score_losses)
-    message += prefix + 'box loss {box_loss.avg:.4f}\t'.format(box_loss=box_losses)
-    if modelName == "onet":
-      message += prefix + 'landmark loss {landmark_loss.avg:.4f}\t'.format(landmark_loss=landmark_losses)
-    print(message, end='')
-      
-  return score_losses.avg, box_losses.avg
+  return score_accs.avg, score_losses.avg
 
 def train(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer, verbal=True):
    # switch to train mode
@@ -191,7 +146,8 @@ def validate(data_loader, model, modelName, score_criterion, box_landmark_criter
    model.eval()
    return forward(data_loader, model, modelName, score_criterion, box_landmark_criterion, epoch, training=False, optimizer=None, verbal=verbal)
 
-def test_all(models, trainloader, testloader):
+def test_all(models):
+  pnet_trainloader, pnet_testloader, rnet_trainloader, rnet_testloader,onet_trainloader, onet_testloader, = get_dataset()
   learning_rate = 1e-4
   score_criterion = nn.BCEWithLogitsLoss()
   box_landmark_criterion = nn.MSELoss()
@@ -199,58 +155,26 @@ def test_all(models, trainloader, testloader):
   pack=32
 
   for (modelName, model) in models:
-    print("Begin training", modelName, "id", model.id, end='')
-    if model.full:
-      extension = "_full"
+    if modelName == "pnet":
+      trainloader, testloader = pnet_trainloader, pnet_testloader
+    elif modelName == "rnet":
+      trainloader, testloader = rnet_trainloader, rnet_testloader
+    elif modelName == "onet":
+      trainloader, testloader = onet_trainloader, onet_testloader
     else:
-      if model.binary:
-        extension = "_binary"
-      else:
-        extension = "_ternary"
-    extension += "_bw" + str(model.bitwidth)
-    save_file = modelName + "_model" + extension + "_" + model.id + ".pt"
+      print("ERROR: model name is", modelName)
 
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
+    print("Begin testing", model.filename)
+    save_file = model.filename + ".pt"
 
-    utils_own.adjust_pack(model, 1)
-    for epoch in range(0, EPOCHS):
-      #train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer, verbal=True)
-      val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
-      scheduler.step()
+    #train_score_accs, train_score_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion,0, optimizer, verbal=True)
+    val_score_acc, val_score_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion,0 , verbal=True)
 
+    message = model.filename + " results: "
+    message += 'val score acc {0:.4f}\t'.format(val_score_acc)
+    message += 'val score loss {0:.4f}'.format(val_score_loss)
+    print(message)
 
-    utils_own.adjust_pack(model, pack)
-    utils_own.permute_all_weights_once(model, pack=pack, mode=-1)
-
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
-
-    for epoch in range(0, EPOCHS):
-      #train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer)
-      val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
-      scheduler.step()
-
-    # Fix pruned packs and fine tune
-    for mod in model.modules():
-      if hasattr(mod, 'mask'):
-         mod.mask = torch.abs(mod.weight.data)
-    model.pruned = True
-
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_decay)
-    lowest_loss = 100 #starting value
-
-    for epoch in range(0, EPOCHS_2):
-      #train_score_loss, train_box_loss = train(trainloader, model, modelName, score_criterion, box_landmark_criterion, epoch, optimizer)
-      val_score_loss, val_box_loss = validate(testloader, model, modelName, score_criterion, box_landmark_criterion, epoch, verbal=True)
-
-      # remember best loss and save checkpoint
-      is_best = val_score_loss + val_box_loss < lowest_loss
-      if is_best:
-         lowest_loss = val_score_loss + val_box_loss
-         torch.save(model, save_file)
-      scheduler.step()
 
 def write_esp_dl_headers(pnet_model, rnet_model, onet_model):
     weight = {
@@ -428,6 +352,7 @@ def convertToQuantized(model):
   return model
 
 if __name__ == "__main__":
+  """
   pnet_model_full = torch.load("torch_saved_models/pnet/pnet_model_full_bw1_37b51e17.pt").to(device)
   rnet_model_full = torch.load("torch_saved_models/rnet/rnet_model_full_bw1_d0c9dcf7.pt").to(device)
   onet_model_full = torch.load("torch_saved_models/onet/onet_model_full_bw1_736d3f51.pt").to(device)
@@ -436,13 +361,14 @@ if __name__ == "__main__":
   rnet_model_qu = torch.load("torch_saved_models/rnet/rnet_model_full_bw1_d0c9dcf7.pt").to(device)
   onet_model_qu = torch.load("torch_saved_models/onet/onet_model_full_bw1_736d3f51.pt").to(device)
 
+
   pnet_model_qu = convertToQuantized(pnet_model_qu)
   rnet_model_qu = convertToQuantized(rnet_model_qu)
   onet_model_qu = convertToQuantized(onet_model_qu)
 
   #pnet_model_binarized = torch.load("torch_saved_models/pnet/").to(device)
   #rnet_model_binarized = torch.load("torch_saved_models/rnet/").to(device)
-  onet_model_binarized = torch.load("torch_saved_models/onet/onet_model_binary_bw1_be54da04.pt").to(device)
+  #onet_model_binarized = torch.load("torch_saved_models/onet/onet_model_binary_bw1_be54da04.pt").to(device)
 
   models = [
     ("pnet", pnet_model_full),
@@ -451,20 +377,27 @@ if __name__ == "__main__":
     ("pnet", pnet_model_qu),
     ("rnet", rnet_model_qu),
     ("onet", onet_model_qu),
-    ("onet", onet_model_binarized)
   ]
-  models = [models[-1]]
+  """
+  onet_model_input_bw2_bw1 = torch.load("torch_saved_models/onet/onet_model_binary_bw1_input_bw2_0a2c3f60.pt")
+  onet_model_input_bw4_bw1 = torch.load("torch_saved_models/onet/onet_model_binary_bw1_input_bw4_55351e1a.pt")
+  onet_model_input_bw6_bw1 = torch.load("torch_saved_models/onet/onet_model_binary_bw1_input_bw6_ab918c15.pt")
+  onet_model_input_bw2_bw2 = torch.load("torch_saved_models/onet/onet_model_binary_bw2_input_bw2_6695afda.pt")
+  onet_model_input_bw4_bw2 = torch.load("torch_saved_models/onet/onet_model_binary_bw2_input_bw4_941626bc.pt")
+  onet_model_input_bw6_bw2 = torch.load("torch_saved_models/onet/onet_model_binary_bw2_input_bw6_b31bf2aa.pt")
+  
+  models = [
+    ("onet", onet_model_input_bw2_bw1)
+  ]
 
-  pnet_trainloader, pnet_testloader, rnet_trainloader, rnet_testloader,onet_trainloader, onet_testloader, = get_dataset()
-  for model in [models]:
-    """
-    if model[0] == "pnet":
-      trainloader, testloader = pnet_trainloader, pnet_testloader
-    elif model[0] == "rnet":
-      trainloader, testloader = rnet_trainloader, rnet_testloader
-    elif model[0] == "onet":
-      trainloader, testloader = onet_trainloader, onet_testloader
-    test_all(model, trainloader, testloader)
-    """
-    save_onnx(models)
+  model = onet_model_input_bw2_bw1
+  #print(model.input_bitwidth)
+  #print(model.bitwidth)
+  #print(list(model.conv1.parameters().flatten())[:10])
+  #model.forward(torch.tensor(torch.randn((1, 3, 48, 48))))
+  #model.forward(torch.tensor(torch.full((1, 3, 48, 48), 3.))) #conv1
+  model.forward(torch.tensor(torch.full((1, 32, 4, 4), 1.))) #conv3
+
+  #test_all(models)
+  #save_onnx(models)
   #write_esp_dl_headers(full_models[0][1], full_models[1][1], full_models[2][1])

@@ -27,7 +27,7 @@ def getModelFilename(model, modelName):
   return extension
 
 class pnet(nn.Module):
-    def __init__(self, full=False, binary=True, conv_thres=0.7, align=True, bitwidth=1, input_bitwidth=1):
+    def __init__(self, full=False, binary=True, conv_thres=0.7, align=True, bitwidth=1, input_bitwidth=1, binarize_input=True):
         super(pnet, self).__init__()
         self.align = align
         self.pruned = False
@@ -36,6 +36,7 @@ class pnet(nn.Module):
         self.binary = binary
         self.bitwidth = bitwidth
         self.input_bitwidth = input_bitwidth
+        self.binarize_input = binarize_input
         self.conv_thres = conv_thres
         self.id = str(uuid.uuid4())[:8]
         self.name = "pnet"
@@ -48,8 +49,10 @@ class pnet(nn.Module):
             self.conv4 = nn.Conv2d(32, 2, kernel_size=1, stride=1, padding=(0, 0), bias=False)
             self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
         elif binary:
-            self.conv1 = binarized_modules_multi.BinarizeConv2d(input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
-            #self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            if self.binarize_input:
+              self.conv1 = binarized_modules_multi.BinarizeConv2d(input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            else:
+              self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv2 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv3 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             #self.conv4 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 2, kernel_size=1, stride=1, padding=(0, 0), bias=False)
@@ -57,14 +60,17 @@ class pnet(nn.Module):
             #self.conv5 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
             self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
         else:
-            self.conv1 = binarized_modules_multi.TernarizeConv2d(conv_thres, input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=False, bias=False) #cannot be aligned since # input channels < 32
-            #self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            if self.binarize_input:
+              self.conv1 = binarized_modules_multi.TernarizeConv2d(conv_thres, input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=False, bias=False) #cannot be aligned since # input channels < 32
+            else:
+              self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv2 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
             self.conv3 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
             #self.conv4 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 2, kernel_size=1, stride=1, padding=(0, 0), align=self.align, bias=False)
             self.conv4 = nn.Conv2d(32, 2, kernel_size=1, stride=1, padding=(0, 0), bias=False)
             #self.conv5 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 4, kernel_size=1, stride=1, padding=(0, 0), align=self.align, bias=False)
             self.conv5 = nn.Conv2d(32, 4, kernel_size=1, stride=1, padding=(0, 0), bias=False)
+
 
         self.softmax1 = torch.nn.Softmax(dim = 1)
         self.act = F.relu if self.full else nn.Hardtanh()
@@ -88,7 +94,7 @@ class pnet(nn.Module):
         return out1, out2
 
 class rnet(nn.Module):
-    def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, conv_thres=0.7, align=True, bitwidth=1, input_bitwidth=1):
+    def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, conv_thres=0.7, align=True, bitwidth=1, input_bitwidth=1, binarize_input=True):
         super(rnet, self).__init__()
         self.align = align
         self.pruned = False
@@ -97,6 +103,7 @@ class rnet(nn.Module):
         self.binary = binary
         self.bitwidth = bitwidth
         self.input_bitwidth = input_bitwidth
+        self.binarize_input = binarize_input
         self.conv_thres = conv_thres
         self.first_sparsity = first_sparsity
         self.rest_sparsity = rest_sparsity
@@ -113,8 +120,10 @@ class rnet(nn.Module):
             self.fc2 = nn.Linear(128, 2, bias=False)
             self.fc3 = nn.Linear(128, 4, bias=False)
         elif binary:
-            self.conv1 = binarized_modules_multi.BinarizeConv2d(input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
-            #self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            if self.binarize_input:
+              self.conv1 = binarized_modules_multi.BinarizeConv2d(input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            else:
+              self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv2 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv3 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 64, kernel_size=3, stride=1, padding=(0, 0), bias=False)
 
@@ -124,8 +133,10 @@ class rnet(nn.Module):
             self.fc2 = nn.Linear(128, 2, bias=False)
             self.fc3 = nn.Linear(128, 4, bias=False)
         else:
-            self.conv1 = binarized_modules_multi.TernarizeConv2d(conv_thres, input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=False, bias=False)
-            #self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            if self.binarize_input:
+              self.conv1 = binarized_modules_multi.TernarizeConv2d(conv_thres, input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=False, bias=False)
+            else:
+              self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv2 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
             self.conv3 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 64, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
 
@@ -166,7 +177,7 @@ class rnet(nn.Module):
         return out1, out2
 
 class onet(nn.Module):
-    def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, conv_thres=0.7, align=True, bitwidth=1, input_bitwidth=1):
+    def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, conv_thres=0.7, align=True, bitwidth=1, input_bitwidth=1, binarize_input=True):
         super(onet, self).__init__()
         self.align = align
         self.pruned = False
@@ -175,6 +186,7 @@ class onet(nn.Module):
         self.binary = binary
         self.bitwidth = bitwidth
         self.input_bitwidth = input_bitwidth
+        self.binarize_input = binarize_input
         self.conv_thres = conv_thres
         self.first_sparsity = first_sparsity
         self.rest_sparsity = rest_sparsity
@@ -193,18 +205,23 @@ class onet(nn.Module):
             self.fc3 = nn.Linear(128, 4, bias=False)
             self.fc4 = nn.Linear(128, 10, bias=False)
         elif binary:
-            self.conv1 = binarized_modules_multi.BinarizeConv2d(input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            if self.binarize_input:
+              self.conv1 = binarized_modules_multi.BinarizeConv2d(input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
+            else:
+              self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv2 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv3 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv4 = binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, 32, 64, kernel_size=2, stride=1, padding=(0, 0), bias=False)
 
             self.fc1 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 64, 128, bias=False)
-            #self.fc2 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 128, 2, bias=False)
-            #self.fc3 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 128, 4, bias=False)
-            #self.fc4 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 128, 10, bias=False)
+            self.fc2 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 128, 2, bias=False)
+            self.fc3 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 128, 4, bias=False)
+            self.fc4 = binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 128, 10, bias=False)
+            """
             self.fc2 = nn.Linear(128, 2, bias=False)
             self.fc3 = nn.Linear(128, 4, bias=False)
             self.fc4 = nn.Linear(128, 10, bias=False)
+            """
             """
             self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
             self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=(0, 0), bias=False)
@@ -217,7 +234,10 @@ class onet(nn.Module):
             self.fc4 = nn.Linear(128, 10, bias=False)
             """
         else:
-            self.conv1 = binarized_modules_multi.TernarizeConv2d(conv_thres, input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=False, bias=False)
+            if self.binarize_input:
+              self.conv1 = binarized_modules_multi.TernarizeConv2d(conv_thres, input_bitwidth, bitwidth, 3, 32, kernel_size=3, stride=1, padding=(0, 0), align=False, bias=False)
+            else:
+              self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=(0, 0), align=False, bias=False)
             self.conv2 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
             self.conv3 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 32, kernel_size=3, stride=1, padding=(0, 0), align=self.align, bias=False)
             self.conv4 = binarized_modules_multi.TernarizeConv2d(conv_thres, bitwidth, bitwidth, 32, 64, kernel_size=2, stride=1, padding=(0, 0), align=self.align, bias=False)
@@ -248,6 +268,76 @@ class onet(nn.Module):
         self.bn8 = nn.BatchNorm1d(10)
         
     def forward(self, x):
+        """
+        x = torch.tensor(torch.full((1, 32, 4, 4), 1.))
+        
+        print("DEBUG conv3 weights", [param.shape for param in self.conv3.parameters()])
+
+        x_ = x
+        x_ = torch.transpose(x_, 1, 3)
+        x_ = torch.transpose(x_, 1, 2)
+        print("input (nwhc)", torch.flatten(x_)[:10])
+
+        # converting nchw to nhwc (nchw -> nwhc -> nhwc)
+        conv3_parameters = self.conv3.weight
+        conv3_parameters = torch.transpose(conv3_parameters, 1, 3)
+        conv3_parameters = torch.transpose(conv3_parameters, 1, 2)
+        print("parameter values (nhwc):", torch.flatten(conv3_parameters)[:10])
+        with torch.no_grad():
+          print("parameter count of nonnegative", str(int(torch.count_nonzero(torch.greater_equal(conv3_parameters, 0)))) + '/' + str(len(torch.flatten(conv3_parameters))))
+
+        #x = self.act(self.bn1(self.conv3(x)))
+        x = self.bn1(self.conv3(x))
+        # converting nchw to nhwc
+        x_ = x
+        x_ = torch.transpose(x_, 1, 3)
+        x_ = torch.transpose(x_, 1, 2)
+        print("output values (nhwc)", torch.flatten(x_)[:10])
+
+        with torch.no_grad():
+          print("output count of nonnegative", str(int(torch.count_nonzero(torch.greater_equal(x_, 0)))) + '/' + str(len(torch.flatten(x_))))
+        """
+
+        """
+        x = torch.tensor(torch.full((1, 32, 15, 15), 3.))
+
+        # converting nchw to whcn (nchw -> wchn -> whcn)
+        conv2_parameters = self.conv2.weight
+        conv2_parameters = torch.transpose(conv2_parameters, 0, 3)
+        conv2_parameters = torch.transpose(conv2_parameters, 1, 2)
+        print("parameter values (whcn):", torch.flatten(conv2_parameters)[:10])
+        with torch.no_grad():
+          print("parameter count of not negative 1", str(int(torch.count_nonzero(conv2_parameters+1))) + '/' + str(len(torch.flatten(conv2_parameters))))
+
+        #x = self.act(self.bn1(self.conv2(x)))
+        x = self.act(self.conv2(x)) #inference code doesn't contain batchnorm yet
+        # converting nchw to cwhn
+        x_ = torch.transpose(x, 1, 3)
+        x_ = torch.transpose(x_, 0, 3)
+        print("output (cwhn)", torch.flatten(x_)[:10])
+
+        with torch.no_grad():
+          print("output count of not negative 1", str(int(torch.count_nonzero(x_+1))) + '/' + str(len(torch.flatten(x_))))
+        """
+
+        """
+        x = torch.tensor(torch.full((1, 3, 48, 48), 3.))
+
+        # converting nchw to whcn (nchw -> wchn -> whcn)
+        conv1_parameters = self.conv1.weight
+        conv1_parameters = torch.transpose(conv1_parameters, 0, 3)
+        conv1_parameters = torch.transpose(conv1_parameters, 1, 2)
+        print("parameter values (whcn):", torch.flatten(conv1_parameters)[:10])
+        with torch.no_grad():
+          print("parameter count of nonzero", str(int(torch.count_nonzero(conv1_parameters+1))) + '/' + str(len(torch.flatten(conv1_parameters))))
+
+        x = self.act(self.bn1(self.conv1(x)))
+        # converting nchw to cwhn
+        x_ = torch.transpose(x, 1, 3)
+        x_ = torch.transpose(x_, 0, 3)
+        print("output (cwhn)", torch.flatten(x_)[:10])
+        """
+
         x = self.act(self.bn1(self.conv1(x)))
         x = self.pool1(x)
         x = self.act(self.bn2(self.conv2(x)))
@@ -260,9 +350,8 @@ class onet(nn.Module):
         out1 = self.softmax1(self.bn6(self.fc2(x)))
         out2 = self.bn7(self.fc3(x))
         out3 = self.bn8(self.fc4(x))
-
+        
         return out1, out2, out3
-
 class FC_small(nn.Module):
     def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, hid=512, ind=784, align=False):
         super(FC_small, self).__init__()
