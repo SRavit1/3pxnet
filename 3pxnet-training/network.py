@@ -1,3 +1,6 @@
+#Temp
+import bn3
+
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
@@ -268,7 +271,6 @@ class onet(nn.Module):
         self.bn8 = nn.BatchNorm1d(10)
         
     def forward(self, x):
-        """
         x = torch.tensor(torch.full((1, 32, 4, 4), 1.))
         
         print("DEBUG conv3 weights", [param.shape for param in self.conv3.parameters()])
@@ -286,17 +288,66 @@ class onet(nn.Module):
         with torch.no_grad():
           print("parameter count of nonnegative", str(int(torch.count_nonzero(torch.greater_equal(conv3_parameters, 0)))) + '/' + str(len(torch.flatten(conv3_parameters))))
 
+        mu, sigma, beta, gamma = self.bn3.running_mean, self.bn3.running_var, self.bn3.bias, self.bn3.weight
+        #thresh_3px = torch.tensor(bn3.bn3_thresh) #incorrect
+        #bn3.bn3_thresh is the signed int32 interpretation of a fixed point int32 number (decimal in the middle)
+        thresh_3px = mu - (beta * torch.sqrt(sigma) / gamma)
+        thresh = mu - (beta * sigma / gamma)
+        print("3pxnet calculated thresh", thresh_3px)
+        print("newly calculated thresh", thresh)
+        thresh_3px = torch.unsqueeze(thresh_3px, 0)
+        thresh = torch.unsqueeze(thresh, 0)
+        thresh_3px = torch.unsqueeze(thresh_3px, 2)
+        thresh = torch.unsqueeze(thresh, 2)
+        thresh_3px = torch.unsqueeze(thresh_3px, 3)
+        thresh = torch.unsqueeze(thresh, 3)
+
+        print("3pxnet calculated thresh", thresh_3px.shape)
+        print("newly calculated thresh", thresh.shape)
+
         #x = self.act(self.bn1(self.conv3(x)))
-        x = self.bn1(self.conv3(x))
+        #x = self.bn3(self.conv3(x))
+        #x = binarized_modules_multi.Binarize(x, quant_mode='det', bitwidth=1)
+        x = self.conv3(x) #(1, 32, 2, 2)
+
+        #x1 = pure pytorch batchnorm2d + binarizzation
+        x1 = self.bn3(x)
+        x1 = binarized_modules_multi.Binarize(x1, quant_mode='det', bitwidth=1)
+
+        #x2 = threshold batchnorm2d with 3pxnet calculated threshold
+        x2 = x
+        x2 = (x2 > thresh_3px).type(torch.int32)
+        x2 = (x2-0.5)*2
+
+        #x3 = threshold batchnorm2d with newly calculated threshold
+        x3 = x
+        x3 = (x3 > thresh).type(torch.int32)
+        x3 = (x3-0.5)*2
+
         # converting nchw to nhwc
-        x_ = x
+        x_ = x1
         x_ = torch.transpose(x_, 1, 3)
         x_ = torch.transpose(x_, 1, 2)
-        print("output values (nhwc)", torch.flatten(x_)[:10])
+        print("output 1 values (nhwc)", [elem.item() for elem in list(torch.flatten(x_)[:128])])
 
         with torch.no_grad():
           print("output count of nonnegative", str(int(torch.count_nonzero(torch.greater_equal(x_, 0)))) + '/' + str(len(torch.flatten(x_))))
-        """
+        # converting nchw to nhwc
+        x_ = x2
+        x_ = torch.transpose(x_, 1, 3)
+        x_ = torch.transpose(x_, 1, 2)
+        print("output 2 values (nhwc)", [elem.item() for elem in list(torch.flatten(x_)[:32])])
+
+        with torch.no_grad():
+          print("output count of nonnegative", str(int(torch.count_nonzero(torch.greater_equal(x_, 0)))) + '/' + str(len(torch.flatten(x_))))
+        # converting nchw to nhwc
+        x_ = x3
+        x_ = torch.transpose(x_, 1, 3)
+        x_ = torch.transpose(x_, 1, 2)
+        print("output 3 values (nhwc)", [elem.item() for elem in list(torch.flatten(x_)[:32])])
+
+        with torch.no_grad():
+          print("output count of nonnegative", str(int(torch.count_nonzero(torch.greater_equal(x_, 0)))) + '/' + str(len(torch.flatten(x_))))
 
         """
         x = torch.tensor(torch.full((1, 32, 15, 15), 3.))
@@ -337,7 +388,7 @@ class onet(nn.Module):
         x_ = torch.transpose(x_, 0, 3)
         print("output (cwhn)", torch.flatten(x_)[:10])
         """
-
+        """
         x = self.act(self.bn1(self.conv1(x)))
         x = self.pool1(x)
         x = self.act(self.bn2(self.conv2(x)))
@@ -352,6 +403,85 @@ class onet(nn.Module):
         out3 = self.bn8(self.fc4(x))
         
         return out1, out2, out3
+        """
+
+"""
+class VGGM(nn.Module):
+    def __init__(self, n_classes=1251, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, conv_thres=0.7, align=True, bitwidth=1, input_bitwidth=1, binarize_input_True):
+        super(VGGM, self).__init__()
+        self.n_classes=n_classes
+        if full:
+            self.features=nn.Sequential(OrderedDict([
+                ('conv1', nn.Conv2d(in_channels=1, out_channels=96, kernel_size=(7,7), stride=(2,2), padding=1)),
+                ('bn1', nn.BatchNorm2d(96, momentum=0.5)),
+                ('relu1', nn.ReLU()),
+                ('mpool1', nn.MaxPool2d(kernel_size=(3,3), stride=(2,2))),
+                ('conv2', nn.Conv2d(in_channels=96, out_channels=256, kernel_size=(5,5), stride=(2,2), padding=1)),
+                ('bn2', nn.BatchNorm2d(256, momentum=0.5)),
+                ('relu2', nn.ReLU()),
+                ('mpool2', nn.MaxPool2d(kernel_size=(3,3), stride=(2,2))),
+                ('conv3', nn.Conv2d(in_channels=256, out_channels=384, kernel_size=(3,3), stride=(1,1), padding=1)),
+                ('bn3', nn.BatchNorm2d(384, momentum=0.5)),
+                ('relu3', nn.ReLU()),
+                ('conv4', nn.Conv2d(in_channels=384, out_channels=256, kernel_size=(3,3), stride=(1,1), padding=1)),
+                ('bn4', nn.BatchNorm2d(256, momentum=0.5)),
+                ('relu4', nn.ReLU()),
+                ('conv5', nn.Conv2d(in_channels=256, out_channels=256, kernel_size=(3,3), stride=(1,1), padding=1)),
+                ('bn5', nn.BatchNorm2d(256, momentum=0.5)),
+                ('relu5', nn.ReLU()),
+                ('mpool5', nn.MaxPool2d(kernel_size=(5,3), stride=(3,2))),
+                ('fc6', nn.Conv2d(in_channels=256, out_channels=4096, kernel_size=(9,1), stride=(1,1))),
+                ('bn6', nn.BatchNorm2d(4096, momentum=0.5)),
+                ('relu6', nn.ReLU()),
+                ('apool6', nn.AdaptiveAvgPool2d((1,1))),
+                ('flatten', nn.Flatten())]))
+                
+            self.classifier=nn.Sequential(OrderedDict([
+                ('fc7', nn.Linear(4096, 1024)),
+                #('drop1', nn.Dropout()),
+                ('relu7', nn.ReLU()),
+                ('fc8', nn.Linear(1024, n_classes))]))
+        elif binary:
+            self.features=nn.Sequential(OrderedDict([
+                ('conv1', binarized_modules_multi.BinarizeConv2d(input_bitwidth, bitwidth, in_channels=1, out_channels=96, kernel_size=(7,7), stride=(2,2), padding=1)),
+                ('bn1', nn.BatchNorm2d(96, momentum=0.5)),
+                ('relu1', nn.functional.tanh),
+                ('mpool1', nn.MaxPool2d(kernel_size=(3,3), stride=(2,2))),
+                ('conv2', binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, in_channels=96, out_channels=256, kernel_size=(5,5), stride=(2,2), padding=1)),
+                ('bn2', nn.BatchNorm2d(256, momentum=0.5)),
+                ('relu2', nn.functional.tanh),
+                ('mpool2', nn.MaxPool2d(kernel_size=(3,3), stride=(2,2))),
+                ('conv3', binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, in_channels=256, out_channels=384, kernel_size=(3,3), stride=(1,1), padding=1)),
+                ('bn3', nn.BatchNorm2d(384, momentum=0.5)),
+                ('relu3', nn.functional.tanh),
+                ('conv4', binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, in_channels=384, out_channels=256, kernel_size=(3,3), stride=(1,1), padding=1)),
+                ('bn4', nn.BatchNorm2d(256, momentum=0.5)),
+                ('relu4', nn.functional.tanh),
+                ('conv5', binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, in_channels=256, out_channels=256, kernel_size=(3,3), stride=(1,1), padding=1)),
+                ('bn5', nn.BatchNorm2d(256, momentum=0.5)),
+                ('relu5', nn.functional.tanh),
+                ('mpool5', nn.MaxPool2d(kernel_size=(5,3), stride=(3,2))),
+                ('fc6', binarized_modules_multi.BinarizeConv2d(bitwidth, bitwidth, in_channels=256, out_channels=4096, kernel_size=(9,1), stride=(1,1))),
+                ('bn6', nn.BatchNorm2d(4096, momentum=0.5)),
+                ('relu6', nn.functional.tanh),
+                ('apool6', nn.AdaptiveAvgPool2d((1,1))),
+                ('flatten', nn.Flatten())]))
+            self.classifier=nn.Sequential(OrderedDict([
+                ('fc7', binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 4096, 1024, bias=False)),
+                #('drop1', nn.Dropout()),
+                ('relu7', nn.functional.tanh),
+                ('fc8', binarized_modules_multi.BinarizeLinear(bitwidth, bitwidth, 1024, n_classes, bias=False))]))
+        else:
+            #TODO
+            pass        
+
+    def forward(self, inp):
+        inp=self.features(inp)
+        #inp=inp.view(inp.size()[0],-1)
+        inp=self.classifier(inp)
+        return inp
+"""
+
 class FC_small(nn.Module):
     def __init__(self, full=False, binary=True, first_sparsity=0.8, rest_sparsity=0.9, hid=512, ind=784, align=False):
         super(FC_small, self).__init__()
