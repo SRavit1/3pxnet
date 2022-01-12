@@ -1,6 +1,3 @@
-#Temp
-import bn3
-
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
@@ -271,9 +268,13 @@ class onet(nn.Module):
         self.bn8 = nn.BatchNorm1d(10)
         
     def forward(self, x):
-        x = torch.tensor(torch.full((1, 32, 4, 4), 1.))
+        x = torch.tensor(torch.full((1, 3, 48, 48), 3.))
         
-        print("DEBUG conv3 weights", [param.shape for param in self.conv3.parameters()])
+        conv_layer = self.conv1
+        bn_layer = self.bn1
+        pool_layer = self.pool1
+
+        print([param.shape for param in conv_layer.parameters()])
 
         x_ = x
         x_ = torch.transpose(x_, 1, 3)
@@ -281,113 +282,54 @@ class onet(nn.Module):
         print("input (nwhc)", torch.flatten(x_)[:10])
 
         # converting nchw to nhwc (nchw -> nwhc -> nhwc)
-        conv3_parameters = self.conv3.weight
-        conv3_parameters = torch.transpose(conv3_parameters, 1, 3)
-        conv3_parameters = torch.transpose(conv3_parameters, 1, 2)
-        print("parameter values (nhwc):", torch.flatten(conv3_parameters)[:10])
+        conv_parameters = conv_layer.weight
+        conv_parameters = torch.transpose(conv_parameters, 1, 3)
+        conv_parameters = torch.transpose(conv_parameters, 1, 2)
+        parameters = self.fc2.weight
+        #make parameters nchw for conv1
+        print("parameter values (nhwc):", torch.flatten(parameters)[:27])
         with torch.no_grad():
-          print("parameter count of nonnegative", str(int(torch.count_nonzero(torch.greater_equal(conv3_parameters, 0)))) + '/' + str(len(torch.flatten(conv3_parameters))))
+          print("parameter count of nonnegative", str(int(torch.count_nonzero(torch.greater_equal(parameters, 0)))) + '/' + str(len(torch.flatten(parameters))))
 
-        mu, sigma, beta, gamma = self.bn3.running_mean, self.bn3.running_var, self.bn3.bias, self.bn3.weight
-        #thresh_3px = torch.tensor(bn3.bn3_thresh) #incorrect
-        #bn3.bn3_thresh is the signed int32 interpretation of a fixed point int32 number (decimal in the middle)
-        thresh_3px = mu - (beta * torch.sqrt(sigma) / gamma)
-        thresh = mu - (beta * sigma / gamma)
-        print("3pxnet calculated thresh", thresh_3px)
-        print("newly calculated thresh", thresh)
-        thresh_3px = torch.unsqueeze(thresh_3px, 0)
-        thresh = torch.unsqueeze(thresh, 0)
-        thresh_3px = torch.unsqueeze(thresh_3px, 2)
-        thresh = torch.unsqueeze(thresh, 2)
-        thresh_3px = torch.unsqueeze(thresh_3px, 3)
-        thresh = torch.unsqueeze(thresh, 3)
 
-        print("3pxnet calculated thresh", thresh_3px.shape)
-        print("newly calculated thresh", thresh.shape)
+        #x = bn_layer(conv_layer(x))
+        x = self.pool1(self.bn1(self.conv1(x)))
+        x = self.pool2(self.bn2(self.conv2(x)))
+        x = self.bn3(self.conv3(x))
+        x = self.bn4(self.conv4(x))
+        x = torch.reshape(x, (-1, 64))
+        x = binarized_modules_multi.Binarize(x-0.01, quant_mode='det', bitwidth=1) # -0.01 to count 0 as negative
+        #expected_out = torch.nn.functional.linear(x, parameters).flatten()
+        #x.fill_(1)
+        x = self.bn5(self.fc1(x))
+        x = binarized_modules_multi.Binarize(x-0.01, quant_mode='det', bitwidth=1)
+        print("input values (nhwc)", [elem.item() for elem in list(torch.flatten(x)[:64])])
+        x1 = self.fc2(x)#self.bn6(self.fc2(x))
+        x2 = self.bn7(self.fc3(x))
+        x3 = self.bn8(self.fc4(x))
+        x = x1
+        #print("output values before binarization (nhwc)", [elem.item() for elem in list(torch.flatten(x)[:64])])
+        #x = self.fc1(x)
+        """
+        x = conv_layer(x)
+        x = bn_layer(x)
+        if pool_layer:
+          x = pool_layer(x)
+        x = binarized_modules_multi.Binarize(x, quant_mode='det', bitwidth=1)
+        """
 
-        #x = self.act(self.bn1(self.conv3(x)))
-        #x = self.bn3(self.conv3(x))
-        #x = binarized_modules_multi.Binarize(x, quant_mode='det', bitwidth=1)
-        x = self.conv3(x) #(1, 32, 2, 2)
-
-        #x1 = pure pytorch batchnorm2d + binarizzation
-        x1 = self.bn3(x)
-        x1 = binarized_modules_multi.Binarize(x1, quant_mode='det', bitwidth=1)
-
-        #x2 = threshold batchnorm2d with 3pxnet calculated threshold
-        x2 = x
-        x2 = (x2 > thresh_3px).type(torch.int32)
-        x2 = (x2-0.5)*2
-
-        #x3 = threshold batchnorm2d with newly calculated threshold
-        x3 = x
-        x3 = (x3 > thresh).type(torch.int32)
-        x3 = (x3-0.5)*2
-
+        x_ = x
+        """
         # converting nchw to nhwc
-        x_ = x1
         x_ = torch.transpose(x_, 1, 3)
         x_ = torch.transpose(x_, 1, 2)
-        print("output 1 values (nhwc)", [elem.item() for elem in list(torch.flatten(x_)[:128])])
+        """
+        print("output values (nhwc)", [elem.item() for elem in list(torch.flatten(x_)[:128])])
 
         with torch.no_grad():
           print("output count of nonnegative", str(int(torch.count_nonzero(torch.greater_equal(x_, 0)))) + '/' + str(len(torch.flatten(x_))))
         # converting nchw to nhwc
-        x_ = x2
-        x_ = torch.transpose(x_, 1, 3)
-        x_ = torch.transpose(x_, 1, 2)
-        print("output 2 values (nhwc)", [elem.item() for elem in list(torch.flatten(x_)[:32])])
 
-        with torch.no_grad():
-          print("output count of nonnegative", str(int(torch.count_nonzero(torch.greater_equal(x_, 0)))) + '/' + str(len(torch.flatten(x_))))
-        # converting nchw to nhwc
-        x_ = x3
-        x_ = torch.transpose(x_, 1, 3)
-        x_ = torch.transpose(x_, 1, 2)
-        print("output 3 values (nhwc)", [elem.item() for elem in list(torch.flatten(x_)[:32])])
-
-        with torch.no_grad():
-          print("output count of nonnegative", str(int(torch.count_nonzero(torch.greater_equal(x_, 0)))) + '/' + str(len(torch.flatten(x_))))
-
-        """
-        x = torch.tensor(torch.full((1, 32, 15, 15), 3.))
-
-        # converting nchw to whcn (nchw -> wchn -> whcn)
-        conv2_parameters = self.conv2.weight
-        conv2_parameters = torch.transpose(conv2_parameters, 0, 3)
-        conv2_parameters = torch.transpose(conv2_parameters, 1, 2)
-        print("parameter values (whcn):", torch.flatten(conv2_parameters)[:10])
-        with torch.no_grad():
-          print("parameter count of not negative 1", str(int(torch.count_nonzero(conv2_parameters+1))) + '/' + str(len(torch.flatten(conv2_parameters))))
-
-        #x = self.act(self.bn1(self.conv2(x)))
-        x = self.act(self.conv2(x)) #inference code doesn't contain batchnorm yet
-        # converting nchw to cwhn
-        x_ = torch.transpose(x, 1, 3)
-        x_ = torch.transpose(x_, 0, 3)
-        print("output (cwhn)", torch.flatten(x_)[:10])
-
-        with torch.no_grad():
-          print("output count of not negative 1", str(int(torch.count_nonzero(x_+1))) + '/' + str(len(torch.flatten(x_))))
-        """
-
-        """
-        x = torch.tensor(torch.full((1, 3, 48, 48), 3.))
-
-        # converting nchw to whcn (nchw -> wchn -> whcn)
-        conv1_parameters = self.conv1.weight
-        conv1_parameters = torch.transpose(conv1_parameters, 0, 3)
-        conv1_parameters = torch.transpose(conv1_parameters, 1, 2)
-        print("parameter values (whcn):", torch.flatten(conv1_parameters)[:10])
-        with torch.no_grad():
-          print("parameter count of nonzero", str(int(torch.count_nonzero(conv1_parameters+1))) + '/' + str(len(torch.flatten(conv1_parameters))))
-
-        x = self.act(self.bn1(self.conv1(x)))
-        # converting nchw to cwhn
-        x_ = torch.transpose(x, 1, 3)
-        x_ = torch.transpose(x_, 0, 3)
-        print("output (cwhn)", torch.flatten(x_)[:10])
-        """
         """
         x = self.act(self.bn1(self.conv1(x)))
         x = self.pool1(x)
@@ -1042,110 +984,6 @@ class DeepAutoEncoder(nn.Module):
       self.pruned = False
 
       ind = 640
-      hid = 64 #128
-      mid = 32 #8
-
-      self.act = F.relu if self.full else nn.Hardtanh()
-      
-      if full:
-        self.fc1 = nn.Linear(ind, hid, bias=False)
-        self.fc2 = nn.Linear(hid, hid, bias=False)
-        self.fc3 = nn.Linear(hid, hid, bias=False)
-        self.fc4 = nn.Linear(hid, hid, bias=False)
-        self.fc5 = nn.Linear(hid, mid, bias=False)
-        self.fc6 = nn.Linear(mid, hid, bias=False)
-        self.fc7 = nn.Linear(hid, hid, bias=False)
-        self.fc8 = nn.Linear(hid, hid, bias=False)
-        self.fc9 = nn.Linear(hid, hid, bias=False)
-        self.fc10 = nn.Linear(hid, ind, bias=False)
-      elif binary:
-        self.fc1 = binarized_modules.BinarizeLinear(1, 1, ind, hid, bias=False)
-        self.fc2 = binarized_modules.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc3 = binarized_modules.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc4 = binarized_modules.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc5 = binarized_modules.BinarizeLinear(1, 1, hid, mid, bias=False)
-        self.fc6 = binarized_modules.BinarizeLinear(1, 1, mid, hid, bias=False)
-        self.fc7 = binarized_modules.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc8 = binarized_modules.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc9 = binarized_modules.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc10 = binarized_modules.BinarizeLinear(1, 1, hid, ind, bias=False)
-      else:
-        self.fc1 = binarized_modules.TernarizeLinear(sparsity, 1, 1, ind, hid, bias=False, align=self.align)
-        self.fc2 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        self.fc3 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        self.fc4 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        self.fc5 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, mid, bias=False, align=self.align)
-        self.fc6 = binarized_modules.TernarizeLinear(sparsity, 1, 1, mid, hid, bias=False, align=self.align)
-        self.fc7 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        self.fc8 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        self.fc9 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        self.fc10 = binarized_modules.TernarizeLinear(sparsity, 1, 1, hid, ind, bias=False, align=self.align)
-
-      self.batchnorm1 = nn.BatchNorm1d(hid)
-      self.batchnorm2 = nn.BatchNorm1d(hid)
-      self.batchnorm3 = nn.BatchNorm1d(hid)
-      self.batchnorm4 = nn.BatchNorm1d(hid)
-      self.batchnorm5 = nn.BatchNorm1d(mid)
-      self.batchnorm6 = nn.BatchNorm1d(hid)
-      self.batchnorm7 = nn.BatchNorm1d(hid)
-      self.batchnorm8 = nn.BatchNorm1d(hid)
-      self.batchnorm9 = nn.BatchNorm1d(hid)
-      self.batchnorm10 = nn.BatchNorm1d(ind)
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.batchnorm1(x)
-        x = self.act(x)
-
-        x = self.fc2(x)
-        x = self.batchnorm2(x)
-        x = self.act(x)
-        
-        x = self.fc3(x)
-        x = self.batchnorm3(x)
-        x = self.act(x)
-
-        x = self.fc4(x)
-        x = self.batchnorm4(x)
-        x = self.act(x)
-
-        x = self.fc5(x)
-        x = self.batchnorm5(x)
-        x = self.act(x)
-
-        x = self.fc6(x)
-        x = self.batchnorm6(x)
-        x = self.act(x)
-        
-        x = self.fc7(x)
-        x = self.batchnorm7(x)
-        x = self.act(x)
-
-        x = self.fc8(x)
-        x = self.batchnorm8(x)
-        x = self.act(x)
-
-        x = self.fc9(x)
-        x = self.batchnorm9(x)
-        x = self.act(x)
-
-        x = self.fc10(x)
-        x = self.batchnorm10(x)
-        #x = self.act(x)
-        
-        return x 
-
-#Deep autoencoder model
-#https://github.com/mlcommons/tiny/tree/master/v0.5
-class DeepAutoEncoder(nn.Module):
-    def __init__(self, full=True, binary=True, sparsity=0.1, align=False):
-      super(DeepAutoEncoder, self).__init__()
-      
-      self.full = full
-      self.binary = binary
-      self.align = align
-      self.pruned = False
-
-      ind = 640
       hid = 128
       mid = 8
 
@@ -1163,35 +1001,27 @@ class DeepAutoEncoder(nn.Module):
         self.fc9 = nn.Linear(hid, hid, bias=False)
         self.fc10 = nn.Linear(hid, ind, bias=False)
       elif binary:
-        #self.fc1 = binarized_modules_multi.BinarizeLinear(1, 1, ind, hid, bias=False)
-        self.fc1 = nn.Linear(ind, hid, bias=False)
+        self.fc1 = binarized_modules_multi.BinarizeLinear(1, 1, ind, hid, bias=False)
         self.fc2 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
         self.fc3 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
         self.fc4 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
-        #self.fc5 = binarized_modules_multi.BinarizeLinear(1, 1, hid, mid, bias=False)
-        #self.fc6 = binarized_modules_multi.BinarizeLinear(1, 1, mid, hid, bias=False)
-        self.fc5 = nn.Linear(hid, mid, bias=False)
-        self.fc6 = nn.Linear(mid, hid, bias=False)
+        self.fc5 = binarized_modules_multi.BinarizeLinear(1, 1, hid, mid, bias=False)
+        self.fc6 = binarized_modules_multi.BinarizeLinear(1, 1, mid, hid, bias=False)
         self.fc7 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
         self.fc8 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
         self.fc9 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
-        #self.fc10 = binarized_modules_multi.BinarizeLinear(1, 1, hid, ind, bias=False)
-        self.fc10 = nn.Linear(hid, ind, bias=False)
+        self.fc10 = binarized_modules_multi.BinarizeLinear(1, 1, hid, ind, bias=False)
       else:
-        #self.fc1 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, ind, hid, bias=False, align=self.align)
-        self.fc1 = nn.Linear(ind, hid, bias=False)
+        self.fc1 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, ind, hid, bias=False, align=self.align)
         self.fc2 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
         self.fc3 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
         self.fc4 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        #self.fc5 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, mid, bias=False, align=self.align)
-        #self.fc6 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, mid, hid, bias=False, align=self.align)
-        self.fc5 = nn.Linear(hid, mid, bias=False)
-        self.fc6 = nn.Linear(mid, hid, bias=False)
+        self.fc5 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, mid, bias=False, align=self.align)
+        self.fc6 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, mid, hid, bias=False, align=self.align)
         self.fc7 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
         self.fc8 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
         self.fc9 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
-        #self.fc10 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, ind, bias=False, align=self.align)
-        self.fc10 = nn.Linear(hid, ind, bias=False)
+        self.fc10 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, ind, bias=False, align=self.align)
 
       self.batchnorm1 = nn.BatchNorm1d(hid)
       self.batchnorm2 = nn.BatchNorm1d(hid)
@@ -1203,7 +1033,6 @@ class DeepAutoEncoder(nn.Module):
       self.batchnorm8 = nn.BatchNorm1d(hid)
       self.batchnorm9 = nn.BatchNorm1d(hid)
       self.batchnorm10 = nn.BatchNorm1d(ind)
-
     def forward(self, x):
         x = self.fc1(x)
         x = self.batchnorm1(x)
