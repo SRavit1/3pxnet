@@ -1001,7 +1001,7 @@ class DeepAutoEncoder(nn.Module):
         self.fc9 = nn.Linear(hid, hid, bias=False)
         self.fc10 = nn.Linear(hid, ind, bias=False)
       elif binary:
-        self.fc1 = binarized_modules_multi.BinarizeLinear(1, 1, ind, hid, bias=False)
+        self.fc1 = nn.Linear(ind, hid, bias=False)
         self.fc2 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
         self.fc3 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
         self.fc4 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
@@ -1010,7 +1010,7 @@ class DeepAutoEncoder(nn.Module):
         self.fc7 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
         self.fc8 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
         self.fc9 = binarized_modules_multi.BinarizeLinear(1, 1, hid, hid, bias=False)
-        self.fc10 = binarized_modules_multi.BinarizeLinear(1, 1, hid, ind, bias=False)
+        self.fc10 = nn.Linear(hid, ind, bias=False)
       else:
         self.fc1 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, ind, hid, bias=False, align=self.align)
         self.fc2 = binarized_modules_multi.TernarizeLinear(sparsity, 1, 1, hid, hid, bias=False, align=self.align)
