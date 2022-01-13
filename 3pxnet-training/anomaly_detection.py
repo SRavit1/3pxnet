@@ -7,6 +7,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
+from tqdm import tqdm
 
 import binarized_modules_multi as binarized_modules
 import esp_dl_utils
@@ -22,10 +23,14 @@ def load_dataset(batch_size=512):
     test_dataset_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
     return dataset_loader, test_dataset_loader
 
-def train_single(model, optimizer, dataset_loader, test_dataset_loader, loss_metric, EPOCHS, history):
+def train_single(model, modelName, optimizer, dataset_loader, test_dataset_loader, loss_metric, EPOCHS, history):
   total_batches = len(dataset_loader)
+  checkpoint_freq = 10
 
-  for epoch in range(EPOCHS):
+  for epoch in tqdm(range(EPOCHS)):
+    if epoch > 0 and epoch % checkpoint_freq == 0:
+      torch.save(model.state_dict(), "trained_models/" + modelName + "_ckpt.pt")
+
     loss_meter = utils.AverageMeter()
     test_loss_meter = utils.AverageMeter()
 
@@ -110,13 +115,13 @@ def train(models):
       utils_own.adjust_pack(model, 1)
 
       history = {'loss': [], 'test loss': []}
-      train_single(model, optimizer, dataset_loader, test_dataset_loader, loss_metric, EPOCHS, history)
+      train_single(model, modelName, optimizer, dataset_loader, test_dataset_loader, loss_metric, EPOCHS, history)
 
       # Retrain with permutation + packing constraint
       utils_own.adjust_pack(model, pack)
       utils_own.permute_all_weights_once(model, pack=pack, mode=permute)
 
-      train_single(model, optimizer, dataset_loader, test_dataset_loader, loss_metric, EPOCHS, history)
+      train_single(model, modelName, optimizer, dataset_loader, test_dataset_loader, loss_metric, EPOCHS, history)
 
       # Fix pruned packs and fine tune
       for mod in model.modules():
@@ -126,7 +131,7 @@ def train(models):
 
       #torch.save(model.state_dict(), "trained_models/" + modelName + ".pt")
 
-      train_single(model, optimizer, dataset_loader, test_dataset_loader, loss_metric, 200, history)
+      train_single(model, modelName, optimizer, dataset_loader, test_dataset_loader, loss_metric, 200, history)
 
       epochs_total = EPOCHS + EPOCHS + 200
 
@@ -211,6 +216,7 @@ if __name__ == "__main__":
 
     prefix = "dae_"
     models = [(prefix + "full", full_model), (prefix + "binarized", binarized_model), (prefix + "ternarized_low", ternarized_low_model), (prefix + "ternarized_medium", ternarized_medium_model), (prefix + "ternarized_high", ternarized_high_model)]
+    models = [models[0]]
 
     train(models)
     save_onnx(models)
