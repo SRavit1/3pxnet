@@ -1,3 +1,6 @@
+#Adapted from SRavit1 3pxnet master branch
+#3pxnet/3pxnet-training/binarized_modules_multi.py
+
 import torch
 import torch.nn as nn
 import math
@@ -102,11 +105,12 @@ def Ternarize(tensor, mult = 0.7, mask = None, permute_list = None, pruned = Fal
 
 class BinarizeLinear(nn.Linear):
 
-    def __init__(self, input_bit=1, output_bit=1, *kargs, **kwargs):
+    def __init__(self, input_bit=1, output_bit=1, weight_bitwidth=1, *kargs, **kwargs):
         super(BinarizeLinear, self).__init__(*kargs, **kwargs)
         self.register_buffer('weight_org', self.weight.data.clone())
         self.input_bit=input_bit
         self.output_bit=output_bit
+        self.weight_bitwidth=weight_bitwidth
 
     def forward(self, input):
         #commented out below condition since multi binarization produces wrong result
@@ -114,7 +118,7 @@ class BinarizeLinear(nn.Linear):
             input.data=Binarize(input.data,quant_mode='multi',bitwidth=self.input_bit)
         else:
             input.data = Binarize(input.data, quant_mode='det')
-        self.weight.data=Binarize(self.weight_org)
+        self.weight.data=Binarize(self.weight_org, quant_mode='multi', bitwidth=self.weight_bitwidth)
         out = nn.functional.linear(input, self.weight)
         if not self.bias is None:
             self.bias.org=self.bias.data.clone()
@@ -167,11 +171,12 @@ class TernarizeLinear(nn.Linear):
 
 class BinarizeConv2d(nn.Conv2d):
 
-    def __init__(self, input_bit=1, output_bit=1, *kargs, **kwargs):
+    def __init__(self, input_bit=1, output_bit=1, weight_bitwidth=1, *kargs, **kwargs):
         super(BinarizeConv2d, self).__init__(*kargs, **kwargs)
         self.register_buffer('weight_org', self.weight.data.clone())
         self.input_bit = input_bit
         self.output_bit = output_bit
+        self.weight_bitwidth=weight_bitwidth
         self.binarize_input = True
         #self.exp=True
 
@@ -193,7 +198,9 @@ class BinarizeConv2d(nn.Conv2d):
         #print("DEBUG BINARIZECONV2D MIN MAX VALUES", torch.max(input.data), torch.min(input.data))
         #print("input bit", self.input_bit, "Debug: BinarizeConv2d input data after binarization:", np.unique(input.data.flatten().numpy()))
         #self.exp=True
-        self.weight.data=Binarize(self.weight_org)
+        #print("Before quantizing", self.weight.data.flatten()[:10])
+        self.weight.data=Binarize(self.weight_org, quant_mode="multi", bitwidth=self.weight_bitwidth)
+        #print("After quantizing", self.weight.data.flatten()[:10])
         #if self.exp:
         #    now=datetime.now().time()
         #    temp=input.detach().numpy()
