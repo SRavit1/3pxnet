@@ -130,7 +130,6 @@ for i in inspect.getmembers(net):
                if threshold < 0:
                   F.write("-")
                F.write(str(int(thres, 2)) + ", \\\n")
-               print("threshold, representation:", threshold, str(int(thres, 2)))
             F.write("} \n")
 
             sign = bitarray()
