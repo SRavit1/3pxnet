@@ -105,19 +105,20 @@ def Ternarize(tensor, mult = 0.7, mask = None, permute_list = None, pruned = Fal
 
 class BinarizeLinear(nn.Linear):
 
-    def __init__(self, input_bit=1, output_bit=1, *kargs, **kwargs):
+    def __init__(self, input_bit=1, output_bit=1, weight_bit=1, *kargs, **kwargs):
         super(BinarizeLinear, self).__init__(*kargs, **kwargs)
         self.register_buffer('weight_org', self.weight.data.clone())
         self.input_bit=input_bit
         self.output_bit=output_bit
+        self.weight_bit = weight_bit
 
     def forward(self, input):
         #commented out below condition since multi binarization produces wrong result
-        if False: #(input.size(1) != 768) and (input.size(1) != 3072): # 784->768
+        if True: #(input.size(1) != 768) and (input.size(1) != 3072): # 784->768
             input.data=Binarize(input.data,quant_mode='multi',bitwidth=self.input_bit)
         else:
             input.data = Binarize(input.data, quant_mode='det')
-        self.weight.data=Binarize(self.weight_org)
+        self.weight.data=Binarize(self.weight_org, quant_mode="multi", bitwidth=self.weight_bit)
         out = nn.functional.linear(input, self.weight)
         if not self.bias is None:
             self.bias.org=self.bias.data.clone()
@@ -170,11 +171,12 @@ class TernarizeLinear(nn.Linear):
 
 class BinarizeConv2d(nn.Conv2d):
 
-    def __init__(self, input_bit=1, output_bit=1, *kargs, **kwargs):
+    def __init__(self, input_bit=1, output_bit=1, weight_bit=1, *kargs, **kwargs):
         super(BinarizeConv2d, self).__init__(*kargs, **kwargs)
         self.register_buffer('weight_org', self.weight.data.clone())
         self.input_bit = input_bit
         self.output_bit = output_bit
+        self.weight_bit = weight_bit
         self.binarize_input = True
         #self.exp=True
 
@@ -197,7 +199,7 @@ class BinarizeConv2d(nn.Conv2d):
         #print("input bit", self.input_bit, "Debug: BinarizeConv2d input data after binarization:", np.unique(input.data.flatten().numpy()))
         #self.exp=True
         #print("Before quantizing", self.weight.data.flatten()[:10])
-        self.weight.data=Binarize(self.weight_org)
+        self.weight.data=Binarize(self.weight_org, quant_mode="multi", bitwidth=self.weight_bit)
         #print("After quantizing", self.weight.data.flatten()[:10])
         #if self.exp:
         #    now=datetime.now().time()
@@ -303,9 +305,10 @@ class QuantizeConv2d(nn.Conv2d):
     '''
     Quantized conv2d with mask for pruning
     '''
-    def __init__(self, *kargs, bitwidth=8, **kwargs):
+    def __init__(self, *kargs, bitwidth=8, weight_bitwidth=8, **kwargs):
         super(QuantizeConv2d, self).__init__(*kargs, **kwargs)
         self.bitwidth=bitwidth
+        self.weight_bitwidth = weight_bitwidth
         #print("QuantizeConv2d initialized with bitwidth", self.bitwidth)
         self.thres = 0
         self.register_buffer('mask', torch.ones_like(self.weight.data))
@@ -314,7 +317,7 @@ class QuantizeConv2d(nn.Conv2d):
     def forward(self, input, quant=True, pruned=False):
         # If mult exists, overwrites pruning
         input.data, _ = quantize(input.data, quant=quant, bitwidth=self.bitwidth)
-        self.weight.data, self.mask=quantize(self.weight_org, mask=self.mask, quant=quant, pruned=pruned, mult=self.thres, bitwidth=self.bitwidth)
+        self.weight.data, self.mask=quantize(self.weight_org, mask=self.mask, quant=quant, pruned=pruned, mult=self.thres, bitwidth=self.weight_bitwidth)
         out = F.conv2d(input, self.weight, None, self.stride, self.padding, self.dilation, self.groups)
         return out
     
@@ -322,9 +325,10 @@ class QuantizeLinear(nn.Linear):
     '''
     Quantized Linear with mask for pruning
     '''
-    def __init__(self, *kargs, bitwidth=8, **kwargs):
+    def __init__(self, *kargs, bitwidth=8, weight_bitwidth=8, **kwargs):
         super(QuantizeLinear, self).__init__(*kargs, **kwargs)
         self.bitwidth=bitwidth
+        self.weight_bitwidth = weight_bitwidth
         #print("QuantizeLinear initialized with bitwidth", self.bitwidth)
         self.thres = 0
         self.register_buffer('mask', torch.ones_like(self.weight.data))
@@ -332,6 +336,6 @@ class QuantizeLinear(nn.Linear):
         
     def forward(self, input, quant=True, pruned=False, mult=None):
         input.data, _ = quantize(input.data, quant=quant, bitwidth=self.bitwidth)
-        self.weight.data, self.mask=quantize(self.weight_org, mask=self.mask, quant=quant, pruned=pruned, mult=self.thres, bitwidth=self.bitwidth)
+        self.weight.data, self.mask=quantize(self.weight_org, mask=self.mask, quant=quant, pruned=pruned, mult=self.thres, bitwidth=self.weight_bitwidth)
         out = F.linear(input, self.weight)
         return out 
