@@ -111,7 +111,10 @@ class BinarizeLinear(nn.Linear):
             input.data=Binarize(input.data,quant_mode='multi',bitwidth=self.input_bit)
         else:
             input.data = Binarize(input.data, quant_mode='det')
-        self.weight.data=Binarize(self.weight_org, quant_mode="multi", bitwidth=self.weight_bit)
+        weight_org_clone = self.weight_org.clone()
+        weight_data=Binarize(self.weight_org, quant_mode="multi", bitwidth=self.weight_bit)
+        self.weight.data=torch.clamp(weight_data,min=-0.99,max=0.99)
+        self.weight_org = weight_org_clone #weight_org modified by Binarize function, we want it to stay the same
         out = nn.functional.linear(input, self.weight)
         if not self.bias is None:
             self.bias.org=self.bias.data.clone()
@@ -196,8 +199,9 @@ class BinarizeConv2d(nn.Conv2d):
         #print("input bit", self.input_bit, "Debug: BinarizeConv2d input data after binarization:", np.unique(input.data.flatten().numpy()))
         #self.exp=True
         weight_org_clone = self.weight_org.clone()
-        self.weight.data=Binarize(self.weight_org, quant_mode="multi", bitwidth=self.weight_bit)
-        self.weight_org = weight_org_clone
+        weight_data=Binarize(self.weight_org, quant_mode="multi", bitwidth=self.weight_bit)
+        self.weight.data=torch.clamp(weight_data,min=-0.99,max=0.99)
+        self.weight_org = weight_org_clone #weight_org modified by Binarize function, we want it to stay the same
         #if self.exp:
         #    now=datetime.now().time()
         #    temp=input.detach().numpy()
